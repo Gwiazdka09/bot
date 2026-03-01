@@ -1,0 +1,29 @@
+# FootStats – pliki ignorowane przez Git
+# Klucz API (NIGDY nie commituj tego pliku!)
+.env
+.env.*
+
+# Raporty PDF generowane przez FootStats
+FootStats_*.pdf
+
+# Pliki tymczasowe Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Srodowiska wirtualne
+venv/
+.venv/
+env/
+.env_folder/
+
+# IDE
+.vscode/
+.idea/
+*.swp
