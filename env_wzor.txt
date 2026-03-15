@@ -1,0 +1,7 @@
+FOOTBALL_API_KEY=""
+APISPORTS_KEY=""
+BZZOIRO_KEY=""
+
+
+# Rejestracja: https://console.groq.com
+GROQ_API_KEY=wpisz_tutaj_nowy_klucz_z_console_groq_com
