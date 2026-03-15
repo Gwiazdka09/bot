@@ -4624,6 +4624,18 @@ def main():
     cache_kolejki: list = []
     cache_pewniaczki: list = []
 
+    # ── AI moduły (opcja AI) – ładuj jeśli dostępne ──────────────────
+    # OPCJA_AI_FOOTSTATS_PATCH
+    _ai_dostepne = False
+    try:
+        from ai_client   import zapytaj_ai        as _zapytaj_ai    # noqa: F401
+        from ai_analyzer import analizuj_mecz_ai  as _analizuj_ai   # noqa: F401
+        from ai_analyzer import wyswietl_analiza_ai as _pokaz_ai    # noqa: F401
+        from scraper_kursy import szukaj_kursy_meczu as _kursy_ai   # noqa: F401
+        _ai_dostepne = True
+    except ImportError:
+        pass
+
     while True:
         imp    = sys_anal["importance"]
         heur   = sys_anal["heurystyka_eng"]
@@ -4669,9 +4681,20 @@ def main():
                 f"[dim]Cache API-Football  "
                 f"[{kol}]({bud['pozostalo']}/{bud['limit']} req)[/{kol}][/dim]"
             )
+        if _ai_dostepne:
+            console.print(
+                "[bold yellow]I[/bold yellow]  "
+                "[bold yellow]🤖 AI Analiza meczu[/bold yellow]  "
+                "[dim yellow](Groq 70B / Ollama + kursy bukmacherów)[/dim yellow]"
+            )
+            console.print(
+                "[bold yellow]J[/bold yellow]  "
+                "[bold yellow]🤖 AI Analiza kolejki[/bold yellow]  "
+                "[dim yellow](wszystkie nadchodzące mecze)[/dim yellow]"
+            )
         console.print("[bold]0[/bold]  Wyjscie\n")
 
-        choices = ["0","1","2","3","4","5","6","7","9","a","A","k","K","c","C","p","P"]
+        choices = ["0","1","2","3","4","5","6","7","9","a","A","k","K","c","C","p","P","i","I","j","J"]
         wybor = Prompt.ask("[bold yellow]Twoj wybor[/bold yellow]",
                            choices=choices, default="1").lower()
 
@@ -4974,6 +4997,195 @@ def main():
             # ── ANALIZA KUPONU ───────────────────────────────────────
             console.print()
             _analiza_kuponu(bzzoiro)
+
+        elif wybor in ("i",):
+            # ── AI ANALIZA POJEDYNCZEGO MECZU ───────────────────────
+            console.print()
+            if not _ai_dostepne:
+                console.print("[red]Brak modułów AI. Sprawdź ai_client.py i ai_analyzer.py.[/red]")
+            else:
+                g, a = wybierz_druzyny(df_wyniki)
+                console.print()
+
+                # Oblicz predykcję FootStats
+                from rich.progress import Progress, SpinnerColumn, TextColumn
+                imp_g  = imp.analiza(g, df_tabela, n_druzyn, kod_ligi, datetime.now())
+                imp_a  = imp.analiza(a, df_tabela, n_druzyn, kod_ligi, datetime.now())
+                heur_g = heur.analiza(g, df_wyniki)
+                heur_a = heur.analiza(a, df_wyniki)
+                h2h_g  = h2h.analiza(g, a)
+                h2h_a  = h2h.analiza(a, g)
+                fort_g = fort.analiza(g)
+                klas_m = klas.klasyfikuj(g, a, "REGULAR_SEASON", datetime.now(), None, None)
+
+                with Progress(SpinnerColumn(style="yellow"),
+                              TextColumn("[yellow]Obliczam Poissona...[/yellow]"),
+                              console=console, transient=True) as _pg:
+                    _pg.add_task("", total=None)
+                    wynik_fs = predict_match(
+                        g, a, df_wyniki, imp_g, imp_a, heur_g, heur_a,
+                        h2h_g, h2h_a, fort_g, klasyfikacja=klas_m)
+
+                if not wynik_fs:
+                    console.print("[red]Za mało danych dla tej pary.[/red]")
+                else:
+                    wyswietl_predykcje(wynik_fs)
+
+                    # Pobierz kursy z Betexplorer
+                    console.print()
+                    _liga_slug = Prompt.ask(
+                        "[dim]Liga dla kursów bukmacherskich (Enter=pomiń)[/dim]",
+                        default=""
+                    ).strip()
+                    _kursy = None
+                    if _liga_slug:
+                        with Progress(SpinnerColumn(style="cyan"),
+                                      TextColumn("[cyan]Pobieram kursy...[/cyan]"),
+                                      console=console, transient=True) as _pg2:
+                            _pg2.add_task("", total=None)
+                            try:
+                                _kursy = _kursy_ai(g, a, _liga_slug)
+                            except Exception as _e:
+                                console.print(f"[yellow]Kursy niedostępne: {_e}[/yellow]")
+
+                    # Pobierz formę jako string
+                    def _forma_str(druz, n=5):
+                        try:
+                            df_f = df_wyniki[
+                                (df_wyniki["gospodarz"]==druz) | (df_wyniki["goscie"]==druz)
+                            ].tail(n)
+                            wyniki = []
+                            for _, r in df_f.iterrows():
+                                if r["gospodarz"] == druz:
+                                    wyniki.append("W" if r["gole_g"]>r["gole_a"] else ("R" if r["gole_g"]==r["gole_a"] else "P"))
+                                else:
+                                    wyniki.append("W" if r["gole_a"]>r["gole_g"] else ("R" if r["gole_g"]==r["gole_a"] else "P"))
+                            return "".join(wyniki)
+                        except Exception:
+                            return "-"
+
+                    _h2h_opis = wynik_fs["h2h_g"].get("opis", "-") or "-"
+
+                    with Progress(SpinnerColumn(style="yellow"),
+                                  TextColumn("[yellow]🤖 AI analizuje mecz...[/yellow]"),
+                                  console=console, transient=True) as _pg3:
+                        _pg3.add_task("", total=None)
+                        _wynik_ai = _analizuj_ai(
+                            gospodarz          = g,
+                            goscie             = a,
+                            p_wygrana          = wynik_fs["p_wygrana"],
+                            p_remis            = wynik_fs["p_remis"],
+                            p_przegrana        = wynik_fs["p_przegrana"],
+                            btts               = wynik_fs["btts"],
+                            over25             = wynik_fs["over25"],
+                            forma_g            = _forma_str(g),
+                            forma_a            = _forma_str(a),
+                            h2h_opis           = _h2h_opis,
+                            pewnosc_modelu     = wynik_fs.get("pewnosc", 0),
+                            komentarz_footstats= komentarz_analityka(wynik_fs),
+                            kursy              = _kursy,
+                        )
+                    _pokaz_ai(_wynik_ai)
+
+        elif wybor in ("j",):
+            # ── AI ANALIZA CAŁEJ KOLEJKI ─────────────────────────────
+            console.print()
+            if not _ai_dostepne:
+                console.print("[red]Brak modułów AI.[/red]")
+            elif df_nadchodzace is None or df_nadchodzace.empty:
+                console.print("[yellow]Brak nadchodzących meczów. Najpierw wybierz ligę (opcja 7).[/yellow]")
+            else:
+                if not cache_kolejki:
+                    console.print("[yellow]Najpierw uruchom analizę kolejki (opcja 5) dla pełnych danych.[/yellow]")
+                    if not Confirm.ask("Kontynuować z uproszczoną analizą?", default=True):
+                        pass
+                    else:
+                        cache_kolejki = analiza_kolejki(
+                            df_nadchodzace, df_wyniki, imp, heur, h2h, fort, klas)
+
+                if cache_kolejki:
+                    _liga_slug_j = Prompt.ask(
+                        "[dim]Liga dla kursów bukmacherskich (Enter=pomiń)[/dim]",
+                        default=""
+                    ).strip()
+
+                    console.print(f"[cyan]Analizuję {len(cache_kolejki)} meczów z AI...[/cyan]")
+                    _wyniki_ai_j = []
+                    for _i, _m in enumerate(cache_kolejki, 1):
+                        _g = _m.get("gospodarz", "")
+                        _a = _m.get("gosc", "")
+                        # cache_kolejki = [{"mecz": row, "predykcja": wynik, "klasyfikacja": klas}]
+                        _pred_raw = _m.get("predykcja")
+                        _pred = _pred_raw if _pred_raw is not None else {}
+                        _mecz_raw = _m.get("mecz")
+                        _mecz = _mecz_raw if _mecz_raw is not None else {}
+                        # Pobierz nazwy z predykcji (zawiera gospodarz/gosc z predict_match)
+                        # Pobierz nazwy — _pred to dict, _mecz to pandas Series lub dict
+                        _g = _pred.get("gospodarz", "") if isinstance(_pred, dict) else ""
+                        _a = _pred.get("gosc", "")      if isinstance(_pred, dict) else ""
+                        if not _g and _mecz_raw is not None:
+                            try:
+                                _g = str(_mecz_raw["gospodarz"]) if "gospodarz" in _mecz_raw.index else ""
+                            except Exception:
+                                pass
+                        if not _a and _mecz_raw is not None:
+                            try:
+                                _a = str(_mecz_raw["goscie"]) if "goscie" in _mecz_raw.index else ""
+                            except Exception:
+                                pass
+                        if not _g or not _a:
+                            continue  # pomijaj mecze bez nazw drużyn
+                        console.print(f"  [{_i}/{len(cache_kolejki)}] {_g} vs {_a}")
+                        _k = None
+                        if _liga_slug_j:
+                            try:
+                                _k = _kursy_ai(_g, _a, _liga_slug_j)
+                            except Exception:
+                                pass
+                        # Pobierz formę jako string
+                        def _fstr(druz, n=5):
+                            try:
+                                df_f = df_wyniki[
+                                    (df_wyniki["gospodarz"]==druz)|(df_wyniki["goscie"]==druz)
+                                ].tail(n)
+                                r2=[]
+                                for _, rw in df_f.iterrows():
+                                    if rw["gospodarz"]==druz:
+                                        r2.append("W" if rw["gole_g"]>rw["gole_a"] else("R" if rw["gole_g"]==rw["gole_a"] else "P"))
+                                    else:
+                                        r2.append("W" if rw["gole_a"]>rw["gole_g"] else("R" if rw["gole_g"]==rw["gole_a"] else "P"))
+                                return "".join(r2)
+                            except Exception:
+                                return "-"
+                        try:
+                            _wyn = _analizuj_ai(
+                                gospodarz           = _g,
+                                goscie              = _a,
+                                p_wygrana           = _pred.get("p_wygrana", 33),
+                                p_remis             = _pred.get("p_remis",   33),
+                                p_przegrana         = _pred.get("p_przegrana", 34),
+                                btts                = _pred.get("btts", 0),
+                                over25              = _pred.get("over25", 0),
+                                forma_g             = _fstr(_g),
+                                forma_a             = _fstr(_a),
+                                h2h_opis            = _pred.get("h2h_g", {}).get("opis", "-") or "-",
+                                pewnosc_modelu      = _pred.get("pewnosc", 0),
+                                komentarz_footstats = komentarz_analityka(_pred),
+                                kursy               = _k,
+                            )
+                            _pokaz_ai(_wyn)
+                            _wyniki_ai_j.append(_wyn)
+                        except Exception as _e:
+                            console.print(f"  [red]Błąd AI dla {_g} vs {_a}: {_e}[/red]")
+
+                    if _wyniki_ai_j:
+                        import json as _json
+                        _plik_ai = f"ai_kolejka_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
+                        Path(_plik_ai).write_text(
+                            _json.dumps(_wyniki_ai_j, ensure_ascii=False, indent=2),
+                            encoding="utf-8"
+                        )
+                        console.print(f"[green]Zapisano: {_plik_ai}[/green]")
 
         elif wybor == "0":
             console.print(f"\n[bold blue]Do zobaczenia! FootStats {VERSION}[/bold blue]\n")
