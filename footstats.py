@@ -5114,17 +5114,24 @@ def main():
                         _g = _m.get("gospodarz", "")
                         _a = _m.get("gosc", "")
                         # cache_kolejki = [{"mecz": row, "predykcja": wynik, "klasyfikacja": klas}]
-                        _pred = _m.get("predykcja") or {}
-                        _mecz = _m.get("mecz") or {}
+                        _pred_raw = _m.get("predykcja")
+                        _pred = _pred_raw if _pred_raw is not None else {}
+                        _mecz_raw = _m.get("mecz")
+                        _mecz = _mecz_raw if _mecz_raw is not None else {}
                         # Pobierz nazwy z predykcji (zawiera gospodarz/gosc z predict_match)
-                        _g = _pred.get("gospodarz") or (
-                            _mecz.get("gospodarz") if hasattr(_mecz, "get") else
-                            getattr(_mecz, "gospodarz", _g)
-                        )
-                        _a = _pred.get("gosc") or (
-                            _mecz.get("goscie") if hasattr(_mecz, "get") else
-                            getattr(_mecz, "goscie", _a)
-                        )
+                        # Pobierz nazwy — _pred to dict, _mecz to pandas Series lub dict
+                        _g = _pred.get("gospodarz", "") if isinstance(_pred, dict) else ""
+                        _a = _pred.get("gosc", "")      if isinstance(_pred, dict) else ""
+                        if not _g and _mecz_raw is not None:
+                            try:
+                                _g = str(_mecz_raw["gospodarz"]) if "gospodarz" in _mecz_raw.index else ""
+                            except Exception:
+                                pass
+                        if not _a and _mecz_raw is not None:
+                            try:
+                                _a = str(_mecz_raw["goscie"]) if "goscie" in _mecz_raw.index else ""
+                            except Exception:
+                                pass
                         if not _g or not _a:
                             continue  # pomijaj mecze bez nazw drużyn
                         console.print(f"  [{_i}/{len(cache_kolejki)}] {_g} vs {_a}")
