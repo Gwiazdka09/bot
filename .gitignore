@@ -27,3 +27,4 @@ env/
 .vscode/
 .idea/
 *.swp
+golazo_bot.py
