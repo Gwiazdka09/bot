@@ -51,3 +51,7 @@ dejavu-sans-ttf-2.37/
 # ── Playwright 
 playwright-report/
 test-results/
+
+sts_cache/
+sts_debug_*.png
+sts_error.png
