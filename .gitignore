@@ -1,22 +1,22 @@
-# ── Klucze API i sekrety ────────────────────────────────────────────
+# ── Klucze API i sekrety 
 .env
 .env.*
 env_wzor.txt
 
-# ── Python ──────────────────────────────────────────────────────────
+# ── Python 
 __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
 .Python
 
-# ── Środowiska wirtualne ─────────────────────────────────────────────
+# ── Środowiska wirtualne 
 venv/
 .venv/
 env/
 ENV/
 
-# ── Pliki generowane przez FootStats ────────────────────────────────
+# ── Pliki generowane przez FootStats 
 FootStats_*.pdf
 Pewniaczki_*.pdf
 ai_kolejka_*.json
@@ -24,30 +24,30 @@ ai_typy_*.json
 ai_analiza_*.json
 kursy_cache/
 
-# ── Cache FootStats ──────────────────────────────────────────────────
+# ── Cache FootStats 
 .cache/
 
-# ── Kopie zapasowe ──────────────────────────────────────────────────
+# ── Kopie zapasowe 
 footstats_BACKUP.py
 *_BACKUP.py
 *_backup.py
 
-# ── Edytory ──────────────────────────────────────────────────────────
+# ── Edytory 
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# ── System ───────────────────────────────────────────────────────────
+# ── System 
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# ── Fonty (duże pliki, pobierz osobno) ──────────────────────────────
+# ── Fonty (duże pliki, pobierz osobno) 
 dejavu-sans-ttf-2.37/
 *.ttf
 
-# ── Playwright ───────────────────────────────────────────────────────
+# ── Playwright 
 playwright-report/
 test-results/
