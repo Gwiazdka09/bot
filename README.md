@@ -1,1 +1,96 @@
-    # README.md\n\n## Szybkie wprowadzenie\n\nWelcome to **FootStats**, a comprehensive tool for football (soccer) analysis and prediction. With this tool, you can analyze teams, match predictions, create a weekly forecast, and more.\n\n## Features\n\n- **Team Analysis**: \n  - Historical performance.\n  - Head-to-head statistics.\n  - Comparative analysis with other teams.\n\n- **Match Prediction**: \n  - Predict the outcome of a match based on historical data and various factors.\n  - Real-time updates and adjustments based on new data.\n\n- **Weekly Forecast**: \n  - Generate a forecast for the upcoming week based on historical data, current performance, and trends.\n\n- **Analysis of Home/Away Performance**:\n  - Compare a team's performance at home versus away matches.\n\n- **User-friendly Interface**: \n  - Intuitive navigation and data presentation.\n\n- **Customization**: \n  - Ability to add new teams, modify existing data, and adjust settings.\n\n## Requirements\n\nBefore running FootStats, make sure you have the following dependencies installed:\n\n- Python 3.8 or higher\n- pandas\n- numpy\n- matplotlib\n- requests\n- openpyxl\n\nYou can install these dependencies using pip:\n\n```bash\npip install pandas numpy matplotlib requests openpyxl\n```\n\n## Installation\n\n1. **Clone the repository**:\n   ```bash\ngit clone https://github.com/yourusername/FootStats.git\ncd FootStats\n```\n\n2. **Install required packages**:\n   ```bash\npip install -r requirements.txt\n```\n\n## Configuration\n\n1. **Create a `.env` file**:\n   - Copy the `.env.example` file to `.env`.\n   - Add your API keys for Bzzoiro and API-Football.\n\n   ```plaintext\nBZZOIRO_KEY=your_bzzoiro_key\nAPISPORTS_KEY=your_apisports_key\n```\n\n## Running the Tool\n\nTo start using FootStats, simply run the following command:\n\n```bash\npython main.py\n```\n\n## Usage\n\n### Team Analysis\n\n1. Select a team from the list.\n2. Choose an option for analysis (e.g., historical performance, head-to-head statistics, etc.).\n3. The tool will display the relevant data and charts.\n\n### Match Prediction\n\n1. Select two teams to predict the outcome of a match.\n2. The tool will display the predicted outcome based on historical data and various factors.\n\n### Weekly Forecast\n\n1. The tool will generate a forecast for the upcoming week based on historical data, current performance, and trends.\n\n### Analysis of Home/Away Performance\n\n1. Select a team to analyze.\n2. The tool will display the team's performance at home versus away matches.\n\n## Contributing\n\nContributions are welcome! Feel free to open an issue or submit a pull request.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Acknowledgments\n\n- Special thanks to the open-source community for their contributions to this project."
+[![CI](https://github.com/Gwiazdka09/bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Gwiazdka09/bot/actions/workflows/ci.yml)
+
+# FootStats v2.7 MultiSource & Intelligence
+
+Zaawansowany bot do analizy meczow pilkarskich. Lacczy dane z 3 darmowych API,
+model Poissona, cross-walidacje ML, kursy bukmacherow (scraping) i analize AI.
+
+## Moduly
+
+| Plik | Opis |
+|---|---|
+| `footstats.py` | Glowny skrypt – menu, Poisson, tabele, PDF, Pewniaczki |
+| `ai_client.py` | Klient AI: Groq 70B (online) z fallbackiem na Ollama (lokalnie) |
+| `ai_analyzer.py` | Analiza meczu przez AI – laczy predykcje FootStats z kursami |
+| `scraper_kursy.py` | Scraper kursow bukmacherskich z Betexplorer (Playwright) |
+| `scraper_sts.py` | Scraper kuponow najlepszych typerow z STS Strefa Inspiracji |
+| `footstats_logging.py` | Modul logowania – plik obrotowy + stderr, monkey-patching |
+
+## Zrodla danych API
+
+Wszystkie darmowe, bez karty kredytowej:
+
+1. **football-data.org** (`FOOTBALL_API_KEY`) – 10 req/min, 12 lig TOP
+2. **api-sports.io** (`APISPORTS_KEY`) – 100 req/dzien, 1200+ lig (Ekstraklasa, MLS, Saudi Pro, Liga MX...)
+3. **sports.bzzoiro.com** (`BZZOIRO_KEY`) – bez limitu, ML CatBoost predictions + kursy + cross-walidacja Poisson
+
+## AI
+
+- **Groq** (llama-3.3-70b-versatile) – podstawowy backend AI, darmowy, online
+- **Ollama** (gemma2:2b) – fallback lokalny, offline
+- Analiza meczu: laczy predykcje statystyczne z kursami bukmacherow
+- Wykrywanie value betow (model vs bukmacher)
+
+## Scrapery (Playwright)
+
+- **Betexplorer** (`scraper_kursy.py`) – kursy 1X2 na nadchodzace mecze
+- **STS Strefa Inspiracji** (`scraper_sts.py`) – kupony top typerow, analiza AI
+
+Wymagaja: `playwright install chromium`
+
+## Opcje menu
+
+Po zaladowaniu ligi dostepne sa nastepujace opcje:
+
+| Opcja | Opis |
+|---|---|
+| **1** | Tabela ligowa (Importance 2.0 – tryb finalny) |
+| **2** | Ostatnie wyniki |
+| **3** | Predykcja meczu (+ H2H / Patent / Fortress / Dom-Wyjazd) |
+| **4** | Porownanie formy (H2H 24 mies. + historia) |
+| **5** | Analiza kolejki (LIGA / PUCHAR / REWANZ / FINAL v2.6) |
+| **6** | Eksport PDF (raport z komentarzem) |
+| **7** | Zmien lige |
+| **9** | Analiza Dom/Wyjazd (dom vs wyjazd statystyki, wykrywanie Podroznikow) |
+| **P** | Pewniaczki Tygodnia (ML + Poisson, Scout Bot EV, PDF) |
+| **A** | Analiza Kuponu (wklej mecze – Scout Bot oceni EV i ryzyko) |
+| **I** | AI Analiza meczu (Groq 70B / Ollama + kursy bukmacherow) |
+| **J** | AI Analiza kolejki (wszystkie nadchodzace mecze) |
+
+## Instalacja
+
+```bash
+# 1. Zainstaluj zaleznosci
+pip install -r requirements.txt
+
+# 2. Zainstaluj przegladarke dla scraperow
+playwright install chromium
+
+# 3. Skonfiguruj klucze API
+#    Skopiuj env_wzor.txt do .env i uzupelnij klucze:
+cp env_wzor.txt .env
+#    Wymagane klucze: FOOTBALL_API_KEY, APISPORTS_KEY, BZZOIRO_KEY, GROQ_API_KEY
+```
+
+## Uruchomienie
+
+```bash
+python footstats.py
+```
+
+## Testy
+
+```bash
+# Testy jednostkowe
+python -m pytest test_footstats.py -v
+
+# Testy integracyjne AI (wymaga .env z kluczami)
+python -m pytest test_ai_integration.py -v
+
+# Wszystkie testy
+python -m pytest test_footstats.py test_ai_integration.py -v
+```
+
+## Licencja
+
+MIT

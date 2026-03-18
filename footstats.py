@@ -69,6 +69,15 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 from dotenv import load_dotenv, set_key
 
+# ── Logging (footstats_logging) ───────────────────────────────────────
+try:
+    import footstats_logging as _flog
+    _flog.inicjalizuj()
+    _logger = _flog.logger
+except ImportError:
+    import logging
+    _logger = logging.getLogger("footstats")
+
 console = Console()
 
 # ================================================================
@@ -4506,6 +4515,7 @@ def _analiza_kuponu(bzzoiro):
 
 
 def main():
+    _logger.info("FootStats %s uruchomiony", VERSION)
     api_key = _wczytaj_lub_stworz_env()
     _zarejestruj_font()
     wyswietl_naglowek()
