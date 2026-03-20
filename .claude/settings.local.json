@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /f/bot -maxdepth 1 -type f -name \"*.py\" -exec wc -l {} +)",
+      "Bash(grep -r \"requests\\\\.\" /f/bot/*.py)",
+      "Bash(grep -r \"subprocess\\\\|os.system\\\\|shell=True\\\\|exec\\\\|eval\" /f/bot/*.py)",
+      "Bash(grep -rn \"\\\\.get\\\\|\\\\.post\\\\|\\\\.put\\\\|api\\\\|http\\\\|url\" /f/bot/*.py)",
+      "Bash(grep -n \"getenv\\\\|API_KEY\\\\|password\\\\|secret\\\\|token\\\\|login\\\\|haslo\" /f/bot/*.py)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
