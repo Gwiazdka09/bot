@@ -306,7 +306,9 @@ def _tryb_interaktywny():
 
     zapis = input("\nZapisać do pliku? (t/n): ").strip().lower()
     if zapis == "t":
-        plik = Path(f"ai_analiza_{g.replace(' ','_')}_vs_{a.replace(' ','_')}.json")
+        import re as _re
+        _safe = lambda s: _re.sub(r'[^a-zA-Z0-9_\-]', '_', s)[:40]
+        plik = Path(f"ai_analiza_{_safe(g)}_vs_{_safe(a)}.json")
         plik.write_text(json.dumps(wynik, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"Zapisano: {plik.resolve()}")
 
