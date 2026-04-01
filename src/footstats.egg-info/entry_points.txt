@@ -1,0 +1,2 @@
+[console_scripts]
+footstats = footstats.cli:main

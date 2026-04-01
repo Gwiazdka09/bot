@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "footstats"
+version = "2.7"
+description = "Football statistics and prediction engine (Poisson + ML)"
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "scipy>=1.11",
+    "rich>=13.0",
+    "python-dotenv>=1.0",
+    "reportlab>=4.0",
+]
+
+[project.optional-dependencies]
+ai = [
+    "groq>=0.4",
+]
+scraper = [
+    "playwright>=1.40",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-cov",
+]
+
+[project.scripts]
+footstats = "footstats.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"footstats.data" = ["*.md", "*.json", "*.csv"]

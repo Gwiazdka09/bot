@@ -1,0 +1,17 @@
+requests>=2.31
+pandas>=2.0
+numpy>=1.24
+scipy>=1.11
+rich>=13.0
+python-dotenv>=1.0
+reportlab>=4.0
+
+[ai]
+groq>=0.4
+
+[dev]
+pytest>=7.4
+pytest-cov
+
+[scraper]
+playwright>=1.40
