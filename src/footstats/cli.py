@@ -754,7 +754,6 @@ def main():
                 console.print()
 
                 # Oblicz predykcję FootStats
-                from rich.progress import Progress, SpinnerColumn, TextColumn
                 imp_g  = imp.analiza(g, df_tabela, n_druzyn, kod_ligi, datetime.now())
                 imp_a  = imp.analiza(a, df_tabela, n_druzyn, kod_ligi, datetime.now())
                 heur_g = heur.analiza(g, df_wyniki)
