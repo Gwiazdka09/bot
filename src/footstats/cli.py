@@ -50,9 +50,83 @@ from footstats.export.tables import (
     wyswietl_predykcje, wybierz_druzyny,
 )
 from footstats.export.pdf import eksportuj_pdf
+from footstats.ai.analyzer import (
+    ai_analiza_pewniaczki, ai_sprawdz_kupon, ai_groq_dostepny,
+)
 
 #  MODUL 18 - GLOWNA PETLA
 # ================================================================
+
+def _ai_blok_pewniaczki(wyniki_p: list):
+    """
+    Blok AI po wyswietleniu Szybkich Pewniakow.
+    Pyta czy uruchomic analize Groq, wyswietla wynik i oferuje
+    sprawdzenie wlasnego kuponu.
+    """
+    if not wyniki_p:
+        return
+    if not ai_groq_dostepny():
+        console.print("[dim yellow]AI niedostepne – dodaj GROQ_API_KEY w .env (opcja K)[/dim yellow]")
+        return
+
+    if not Confirm.ask(
+        "[bold yellow]🤖 Analiza AI + propozycja kuponów (Groq llama-3.3-70b)?[/bold yellow]",
+        default=True,
+    ):
+        return
+
+    # Analiza listy pewniaczków
+    console.print("[dim yellow]AI analizuje typy...[/dim yellow]")
+    try:
+        with Progress(SpinnerColumn(style="yellow"),
+                      TextColumn("[yellow]Groq: analizuję pewniaczki...[/yellow]"),
+                      console=console, transient=True) as pg:
+            pg.add_task("", total=None)
+            analiza = ai_analiza_pewniaczki(wyniki_p)
+        console.print(Panel(
+            analiza,
+            title="[bold yellow]🤖 AI – Analiza Pewniaczków + Kupony[/bold yellow]",
+            border_style="yellow",
+            padding=(1, 2),
+        ))
+    except Exception as e:
+        console.print(f"[red]AI blad: {e}[/red]")
+        return
+
+    # Opcja: sprawdz wlasny kupon
+    if not Confirm.ask("[dim]Sprawdzić własny kupon przez AI?[/dim]", default=False):
+        return
+
+    console.print(
+        "[dim]Wpisz typy kuponu, np.:[/dim]\n"
+        "[dim cyan]PSG 1X @1.31, Bayern wygrana @1.55, Leverkusen 1 @1.88[/dim cyan]"
+    )
+    picks_text = Prompt.ask("[bold cyan]Twój kupon[/bold cyan]").strip()
+    if not picks_text:
+        return
+
+    try:
+        stawka_str = Prompt.ask("[yellow]Stawka (PLN)[/yellow]", default="5")
+        stawka = float(stawka_str)
+    except ValueError:
+        stawka = 5.0
+
+    console.print("[dim yellow]AI sprawdza kupon...[/dim yellow]")
+    try:
+        with Progress(SpinnerColumn(style="cyan"),
+                      TextColumn("[cyan]Groq: oceniam kupon...[/cyan]"),
+                      console=console, transient=True) as pg:
+            pg.add_task("", total=None)
+            ocena = ai_sprawdz_kupon(picks_text, stawka, wzorzec_ml=wyniki_p)
+        console.print(Panel(
+            ocena,
+            title="[bold cyan]🤖 AI – Ocena Twojego Kuponu[/bold cyan]",
+            border_style="cyan",
+            padding=(1, 2),
+        ))
+    except Exception as e:
+        console.print(f"[red]AI blad: {e}[/red]")
+
 
 def _reinicjuj_systemy(df_tabela, df_wyniki, n_druzyn, kod_ligi):
     """Tworzy/odswierza wszystkie systemy analityczne po zmianie ligi."""
@@ -294,6 +368,7 @@ def main():
             pg.add_task("", total=None)
             wyniki_start = szybkie_pewniaczki_2dni(bzzoiro, prog_start, godz_start)
         wyswietl_szybkie_pewniaczki(wyniki_start, prog_start, godz_start)
+        _ai_blok_pewniaczki(wyniki_start)
 
         if not Confirm.ask("[dim]Zaladowac tez konkretna lige?[/dim]", default=True):
             console.print("[dim]Do widzenia.[/dim]")
@@ -606,6 +681,7 @@ def main():
                         pg.add_task("", total=None)
                         cache_pewniaczki = szybkie_pewniaczki_2dni(bzzoiro, prog_p, godz_p)
                     wyswietl_szybkie_pewniaczki(cache_pewniaczki, prog_p, godz_p)
+                    _ai_blok_pewniaczki(cache_pewniaczki)
                 else:
                     skanuj_inne = False
                     if sources._status.get("fdb"):
@@ -625,6 +701,7 @@ def main():
                             prog=prog_p,
                         )
                     wyswietl_pewniaczki(cache_pewniaczki, prog_p)
+                    _ai_blok_pewniaczki(cache_pewniaczki)
 
                 if cache_pewniaczki and Confirm.ask(
                     "[bold cyan]Eksportowac do PDF?[/bold cyan]", default=True

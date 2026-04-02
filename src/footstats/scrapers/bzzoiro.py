@@ -94,26 +94,79 @@ class BzzoiroClient:
 
     def predykcje_tygodnia(self, liga_kod: str = None) -> list:
         """
-        Pobiera predykcje na caly tydzien.
-        Zwraca liste slownikow z kompletna analiza.
+        Pobiera predykcje ML na caly tydzien z /predictions/.
+        Zwraca liste slownikow z kompletna analiza ML i kursami.
         """
-        wydarzenia = self.nadchodzace_tygodnia(liga_kod)
+        data_od = datetime.now().strftime("%Y-%m-%d")
+        data_do = (datetime.now() + timedelta(days=PEWNIACZEK_DNI)).strftime("%Y-%m-%d")
+        params  = {"date_from": data_od, "date_to": data_do}
+
+        liga_id = None
+        if liga_kod:
+            liga_id = self._LIGA_IDS.get(liga_kod)
+        if liga_id:
+            params["league"] = liga_id
+
+        dane = self._get("/predictions/", params=params)
+        preds = dane.get("results", []) if dane else []
+
         wynik = []
-        for ev in wydarzenia:
+        for pred in preds:
+            ev = pred.get("event") or {}
+
+            # Liga
+            liga_obj = ev.get("league", {})
+            liga_str = liga_obj.get("name", "?") if isinstance(liga_obj, dict) else str(liga_obj)
+
+            # Data/godzina z event_date ISO
+            ev_date = str(ev.get("event_date", ""))
+            data    = ev_date[:10]
+            godzina = ev_date[11:16]
+
+            # pred_ml w formacie zgodnym z _bzz_parse_prob (Format E: prob_*)
             pred_ml = None
-            if ev.get("predictions"):
-                # predictions sa juz w evencie
-                pred_ml = ev["predictions"]
+            if pred.get("prob_home_win") is not None:
+                # Most likely score: "0-1" → {"home": 0, "away": 1}
+                mls_raw = str(pred.get("most_likely_score") or "1-1")
+                try:
+                    mg, ma = mls_raw.split("-", 1)
+                    mls = {"home": int(mg), "away": int(ma)}
+                except Exception:
+                    mls = {"home": 1, "away": 0}
+
+                pred_ml = {
+                    "prob_home_win": pred["prob_home_win"],
+                    "prob_draw":     pred.get("prob_draw", 0),
+                    "prob_away_win": pred.get("prob_away_win", 0),
+                    "prob_over_25":  pred.get("prob_over_25", 0),
+                    "prob_btts_yes": pred.get("prob_btts_yes", 0),
+                    "most_likely_score": mls,
+                    "expected_home_goals": pred.get("expected_home_goals"),
+                    "expected_away_goals": pred.get("expected_away_goals"),
+                }
+
+            # Kursy z event
+            odds = None
+            if ev.get("odds_home") is not None:
+                odds = {
+                    "home":      ev.get("odds_home"),
+                    "draw":      ev.get("odds_draw"),
+                    "away":      ev.get("odds_away"),
+                    "over_2_5":  ev.get("odds_over_25"),
+                    "under_2_5": ev.get("odds_under_25"),
+                    "btts":      ev.get("odds_btts_yes"),
+                }
+
             wynik.append({
-                "id":         ev.get("id"),
-                "gosp":       ev.get("home_team"),
-                "gosc":       ev.get("away_team"),
-                "liga":       ev.get("league", {}).get("name", "?") if isinstance(ev.get("league"), dict) else str(ev.get("league", "?")),
-                "data":       str(ev.get("event_date", ""))[:10],
-                "godzina":    str(ev.get("event_date", ""))[11:16],
-                "status":     ev.get("status", "notstarted"),
-                "pred_ml":    pred_ml,  # moze byc None jesli brak
-                "odds":       ev.get("odds"),
+                "id":      ev.get("id"),
+                "gosp":    ev.get("home_team"),
+                "gosc":    ev.get("away_team"),
+                "liga":    liga_str,
+                "data":    data,
+                "godzina": godzina,
+                "status":  ev.get("status", "notstarted"),
+                "pred_ml": pred_ml,
+                "odds":    odds,
             })
         return wynik
 
@@ -221,6 +274,16 @@ def _bzz_parse_prob(pred_ml: dict) -> tuple:
             return norm(pw, pr, pp,
                         p(pred_ml.get("btts", 0)),
                         p(pred_ml.get("over_2_5", 0)))
+
+    # Format E: prob_home_win / prob_draw / prob_away_win (aktualny /predictions/ API)
+    if "prob_home_win" in pred_ml:
+        pw = p(pred_ml.get("prob_home_win"))
+        pr = p(pred_ml.get("prob_draw"))
+        pp = p(pred_ml.get("prob_away_win"))
+        if pw + pr + pp > 5:
+            return norm(pw, pr, pp,
+                        p(pred_ml.get("prob_btts_yes", 0)),
+                        p(pred_ml.get("prob_over_25", 0)))
 
     # Format C: home/draw/away bezposrednio
     if all(k in pred_ml for k in ("home", "draw", "away")):

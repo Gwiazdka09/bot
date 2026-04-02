@@ -16,16 +16,19 @@ venv/
 env/
 ENV/
 
-# ── Pliki generowane przez FootStats 
+# ── Pliki generowane przez FootStats
 FootStats_*.pdf
 Pewniaczki_*.pdf
 ai_kolejka_*.json
 ai_typy_*.json
 ai_analiza_*.json
-kursy_cache/
 
-# ── Cache FootStats 
+# ── Cache FootStats
 .cache/
+cache/
+
+# ── Dane (DB backtest)
+data/
 
 # ── Kopie zapasowe 
 footstats_BACKUP.py
@@ -52,6 +55,7 @@ dejavu-sans-ttf-2.37/
 playwright-report/
 test-results/
 
-sts_cache/
 sts_debug_*.png
 sts_error.png
+superoferta_debug*.png
+superoferta_error.png

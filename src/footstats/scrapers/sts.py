@@ -27,10 +27,10 @@ except ImportError:
     sys.exit(1)
 
 from dotenv import load_dotenv
-load_dotenv(".env")
+load_dotenv()
 
 STS_URL   = "https://www.sts.pl"
-CACHE_DIR = Path("sts_cache")
+CACHE_DIR = Path("cache/sts")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────

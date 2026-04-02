@@ -8,7 +8,7 @@ import requests
 from dotenv import load_dotenv
 from footstats.utils.console import console
 
-load_dotenv(".env")
+load_dotenv()
 
 GROQ_MODEL   = "llama-3.3-70b-versatile"
 OLLAMA_MODEL = "gemma2:2b"

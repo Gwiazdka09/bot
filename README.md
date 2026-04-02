@@ -1,1 +1,114 @@
-    # README.md\n\n## Szybkie wprowadzenie\n\nWelcome to **FootStats**, a comprehensive tool for football (soccer) analysis and prediction. With this tool, you can analyze teams, match predictions, create a weekly forecast, and more.\n\n## Features\n\n- **Team Analysis**: \n  - Historical performance.\n  - Head-to-head statistics.\n  - Comparative analysis with other teams.\n\n- **Match Prediction**: \n  - Predict the outcome of a match based on historical data and various factors.\n  - Real-time updates and adjustments based on new data.\n\n- **Weekly Forecast**: \n  - Generate a forecast for the upcoming week based on historical data, current performance, and trends.\n\n- **Analysis of Home/Away Performance**:\n  - Compare a team's performance at home versus away matches.\n\n- **User-friendly Interface**: \n  - Intuitive navigation and data presentation.\n\n- **Customization**: \n  - Ability to add new teams, modify existing data, and adjust settings.\n\n## Requirements\n\nBefore running FootStats, make sure you have the following dependencies installed:\n\n- Python 3.8 or higher\n- pandas\n- numpy\n- matplotlib\n- requests\n- openpyxl\n\nYou can install these dependencies using pip:\n\n```bash\npip install pandas numpy matplotlib requests openpyxl\n```\n\n## Installation\n\n1. **Clone the repository**:\n   ```bash\ngit clone https://github.com/yourusername/FootStats.git\ncd FootStats\n```\n\n2. **Install required packages**:\n   ```bash\npip install -r requirements.txt\n```\n\n## Configuration\n\n1. **Create a `.env` file**:\n   - Copy the `.env.example` file to `.env`.\n   - Add your API keys for Bzzoiro and API-Football.\n\n   ```plaintext\nBZZOIRO_KEY=your_bzzoiro_key\nAPISPORTS_KEY=your_apisports_key\n```\n\n## Running the Tool\n\nTo start using FootStats, simply run the following command:\n\n```bash\npython main.py\n```\n\n## Usage\n\n### Team Analysis\n\n1. Select a team from the list.\n2. Choose an option for analysis (e.g., historical performance, head-to-head statistics, etc.).\n3. The tool will display the relevant data and charts.\n\n### Match Prediction\n\n1. Select two teams to predict the outcome of a match.\n2. The tool will display the predicted outcome based on historical data and various factors.\n\n### Weekly Forecast\n\n1. The tool will generate a forecast for the upcoming week based on historical data, current performance, and trends.\n\n### Analysis of Home/Away Performance\n\n1. Select a team to analyze.\n2. The tool will display the team's performance at home versus away matches.\n\n## Contributing\n\nContributions are welcome! Feel free to open an issue or submit a pull request.\n\n## License\n\nThis project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.\n\n## Acknowledgments\n\n- Special thanks to the open-source community for their contributions to this project."
+# FootStats v3.0
+
+Narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), 3 źródła danych API oraz AI (Groq llama-3.3-70b) w jedno CLI.
+
+## Funkcje
+
+- **Predykcja meczów** – model Poissona + ML cross-walidacja z Bzzoiro
+- **Pewniaczki 48h** – skanowanie wszystkich lig Bzzoiro, Scout Bot EV, analiza AI
+- **AI Analiza** – Groq 70B analizuje typy, buduje kupony AKO, ocenia Twój kupon
+- **Form Scraper** – SofaScore (primary) + FlashScore (fallback), forma + kontuzje
+- **SuperOferta** – scrapuje boosted odds ze STS, porównuje z Bzzoiro
+- **Analiza kolejki** – wszystkie nadchodzące mecze ligi + ranking pewności
+- **Dom/Wyjazd** – statystyki H/A drużyn
+- **Eksport PDF** – raporty z czcionką DejaVu (polskie znaki)
+- **Backtest DB** – SQLite, śledzenie skuteczności typów
+
+## Wymagania
+
+- Python 3.10+
+- Klucze API: `FOOTBALL_DATA_KEY`, `APISPORTS_KEY`, `BZZOIRO_KEY`, `GROQ_API_KEY`
+
+## Instalacja
+
+```bash
+git clone https://github.com/yourusername/FootStats.git
+cd FootStats
+
+# Środowisko wirtualne (zalecane)
+python -m venv venv
+venv\Scripts\activate      # Windows
+# source venv/bin/activate  # Linux/Mac
+
+# Instalacja pakietu (tryb edytowalny)
+pip install -e .[dev]
+
+# Playwright (dla scraperów STS/SofaScore/FlashScore)
+playwright install chromium
+```
+
+## Konfiguracja
+
+Stwórz plik `.env` w katalogu głównym:
+
+```plaintext
+FOOTBALL_DATA_KEY=twoj_klucz_football_data_org
+APISPORTS_KEY=twoj_klucz_api_sports_io
+BZZOIRO_KEY=twoj_klucz_bzzoiro
+GROQ_API_KEY=twoj_klucz_groq
+```
+
+## Uruchomienie
+
+```bash
+python -m footstats
+```
+
+## Struktura projektu
+
+```
+FootStats/
+├── src/footstats/
+│   ├── cli.py                  # Główna pętla CLI
+│   ├── config.py               # Konfiguracja, klucze ENV
+│   ├── data_fetcher.py         # Pobieranie danych z API
+│   ├── ai/
+│   │   ├── client.py           # Groq → Ollama fallback
+│   │   └── analyzer.py         # Analiza meczów + kupony AI
+│   ├── core/
+│   │   ├── poisson.py          # Model Poissona
+│   │   ├── quick_picks.py      # Szybkie Pewniaczki 48h + Scout Bot
+│   │   ├── weekly_picks.py     # Pewniaczki Tygodnia (multi-liga)
+│   │   ├── backtest.py         # SQLite DB – śledzenie typów
+│   │   └── ...                 # forma, H2H, wartość zakładu itp.
+│   ├── scrapers/
+│   │   ├── bzzoiro.py          # Bzzoiro ML CatBoost
+│   │   ├── sts.py              # STS Strefa Inspiracji (Playwright)
+│   │   ├── superoferta.py      # STS SuperOferta boosted odds
+│   │   ├── form_scraper.py     # SofaScore + FlashScore forma
+│   │   └── ...
+│   └── export/
+│       ├── pdf.py              # Eksport PDF (ReportLab)
+│       └── pdf_font.py         # Czcionka DejaVu
+├── data/                       # SQLite DB (gitignored)
+├── cache/                      # Cache scraperów (gitignored)
+├── tests/                      # Testy pytest (59 testów)
+└── .env                        # Klucze API (gitignored)
+```
+
+## Opcje menu
+
+| Opcja | Opis |
+|-------|------|
+| **P** | Szybkie Pewniaczki 48h (Bzzoiro ML + AI Groq) |
+| **1** | Analiza kolejki meczów |
+| **2** | Predykcja wybranego meczu |
+| **3** | Tabela ligi |
+| **4** | Wyniki historyczne |
+| **5** | Statystyki Dom/Wyjazd |
+| **6** | Analiza H2H |
+| **7** | Value bets |
+| **8** | Pełne Pewniaczki Tygodnia (Poisson + ML) |
+| **9** | Analiza drużyny |
+| **I** | AI analiza meczu (Groq 70B) |
+| **K** | Konfiguracja kluczy API |
+
+## Testy
+
+```bash
+pytest tests/ -v
+```
+
+## Licencja
+
+MIT License

@@ -40,7 +40,7 @@ LIGI_BETEXPLORER = {
     "champions-league":"https://www.betexplorer.com/football/europe/champions-league/results/",
 }
 
-CACHE_DIR = Path("kursy_cache")
+CACHE_DIR = Path("cache/kursy")
 
 
 def _zapisz_cache(liga: str, dane: list) -> Path:

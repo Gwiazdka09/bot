@@ -2,22 +2,55 @@
 ai_analyzer.py – Analizator AI dla FootStats
 Łączy predykcje FootStats (Poisson+ML) z kursami bukmacherów → pyta AI → daje typy
 
-Użycie z FootStats – dodaj opcję "ai" w menu footstats.cli (patrz koniec pliku)
+Moduły:
+  analizuj_mecz_ai()        – analiza pojedynczego meczu
+  ai_analiza_pewniaczki()   – analiza listy pewniaczków + propozycja kuponów
+  ai_sprawdz_kupon()        – sprawdzenie kuponu podanego przez użytkownika
 """
 
 import json
+import os
 import re
-import sys
 from pathlib import Path
 
 # Importy z pakietu footstats
-try:
-    from footstats.ai.client import zapytaj_ai
-    from footstats.scrapers.kursy import szukaj_kursy_meczu, scrape_betexplorer, pokaz_dostepne_ligi
-except ImportError as e:
-    print(f"BŁĄD importu: {e}")
-    print("Upewnij się że pakiet footstats jest zainstalowany (pip install -e .).")
-    sys.exit(1)
+from footstats.ai.client import zapytaj_ai
+from footstats.scrapers.kursy import szukaj_kursy_meczu, scrape_betexplorer, pokaz_dostepne_ligi
+
+
+# ── Wyspecjalizowany prompt typerski ────────────────────────────────────────
+_SYSTEM_TYPER = (
+    "Jesteś doświadczonym analitykiem bukmacherskim z 10-letnim stażem. "
+    "Specjalizujesz się w typowaniu piłkarskim na rynku polskim. "
+    "Zawsze odpowiadasz po polsku. Znasz podatek 12% zryczałtowany (netto = stawka × kurs × 0.88). "
+    "Analizujesz EV (Expected Value), formy drużyn i dane ML. "
+    "Jesteś sceptyczny wobec kuponów z >5 zdarzeniami – ryzyko rośnie wykładniczo. "
+    "Preferujesz value bety (EV>0) nad bezrefleksyjnymi faworytami z niskim kursem. "
+    "Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po."
+)
+
+
+def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
+    """Groq z systemowym promptem wyspecjalizowanego typerа."""
+    klucz = os.getenv("GROQ_API_KEY", "").strip()
+    if not klucz:
+        raise RuntimeError("Brak GROQ_API_KEY w .env")
+    try:
+        import groq as groq_lib
+        client = groq_lib.Groq(api_key=klucz)
+        resp = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": _SYSTEM_TYPER},
+                {"role": "user",   "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.25,
+        )
+        return resp.choices[0].message.content
+    except Exception as e:
+        # Fallback na standardowego zapytaj_ai
+        return zapytaj_ai(prompt, max_tokens)
 
 
 # ── Pomocnicze ───────────────────────────────────────────────────────
@@ -307,6 +340,148 @@ def _tryb_interaktywny():
         plik = Path(f"ai_analiza_{_safe(g)}_vs_{_safe(a)}.json")
         plik.write_text(json.dumps(wynik, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"Zapisano: {plik.resolve()}")
+
+
+# ════════════════════════════════════════════════════════════════════
+#  AI + PEWNIACZKI – analiza listy typów i builder kuponów
+# ════════════════════════════════════════════════════════════════════
+
+def ai_analiza_pewniaczki(wyniki: list) -> str:
+    """
+    Groq analizuje listę pewniaczków z Bzzoiro ML.
+
+    Wejście: lista zwrócona przez szybkie_pewniaczki_2dni()
+    Wyjście: sformatowany tekst z:
+      - TOP 3 najlepszymi typami (EV + pewność)
+      - Propozycją kuponu ~50 PLN netto (5 PLN stawka)
+      - Propozycją kuponu ~100 PLN netto (5 PLN stawka)
+      - Głównymi ryzykami
+    """
+    if not wyniki:
+        return "Brak pewniaczków do analizy."
+
+    # Zbuduj kompaktowy opis każdego meczu
+    mecze_opisy = []
+    for w in wyniki[:20]:
+        g    = w.get("gospodarz", "?")
+        a    = w.get("goscie", "?")
+        liga = w.get("liga", "?")
+        pw, pr, pp = w.get("pw", 0), w.get("pr", 0), w.get("pp", 0)
+        bt, o25    = w.get("bt", 0), w.get("o25", 0)
+        data  = w.get("data", "")
+        godz  = w.get("godzina", "")
+
+        # Typy z EV
+        scout = w.get("scout", {})
+        oceny = {o["typ"]: o for o in scout.get("oceny", [])}
+        typy_str = []
+        for typ_opis, szansa in w.get("typy", []):
+            oc = oceny.get(typ_opis, {})
+            ev = oc.get("ev")
+            kurs = oc.get("kurs", "–")
+            ev_txt = f"EV={ev*100:+.0f}%" if ev is not None else ""
+            typy_str.append(f"{typ_opis} ({szansa:.0f}% kurs={kurs} {ev_txt})")
+
+        odds = w.get("odds") or {}
+        k1 = odds.get("home", "–")
+        kx = odds.get("draw", "–")
+        k2 = odds.get("away", "–")
+
+        mecze_opisy.append(
+            f"• [{data} {godz}] {g} vs {a} [{liga}]\n"
+            f"  ML: 1={pw:.0f}% X={pr:.0f}% 2={pp:.0f}% BTTS={bt:.0f}% O2.5={o25:.0f}%\n"
+            f"  Kursy: 1={k1} X={kx} 2={k2}\n"
+            f"  Typy: {' | '.join(typy_str)}"
+        )
+
+    prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami ML (CatBoost Bzzoiro) na najbliższe 48h.
+
+PODATEK: 12% zryczałtowany. Wzór netto: stawka × kurs_łączny × 0.88
+CELE KUPONÓW: 5 PLN stawka → KUPON A: cel ~50 PLN netto (kurs_łączny ≈ 11.4) | KUPON B: cel ~100 PLN netto (kurs_łączny ≈ 22.7)
+
+MECZE:
+{chr(10).join(mecze_opisy)}
+
+ZADANIE (odpowiedz po polsku, konkretnie):
+
+1. TOP 3 POJEDYNCZE TYPY – wybierz 3 typy z najwyższym EV i pewnością ML. Dla każdego: mecz, typ, kurs, uzasadnienie (1 zdanie).
+
+2. KUPON A (~50 PLN netto, stawka 5 PLN):
+   - Wybierz 4-5 zdarzeń (różne mecze!) z łącznym kursem ~11-12
+   - Format: NR. Mecz | typ | kurs | pewność ML
+   - Kurs łączny i oczekiwana wygrana netto
+   - Uzasadnienie (2-3 zdania)
+
+3. KUPON B (~100 PLN netto, stawka 5 PLN):
+   - Wybierz 5-6 zdarzeń z łącznym kursem ~22-24
+   - Format: NR. Mecz | typ | kurs | pewność ML
+   - Kurs łączny i oczekiwana wygrana netto
+   - Uzasadnienie (2-3 zdania)
+
+4. RYZYKA – wymień 2-3 główne ryzyka dla tych kuponów.
+
+WAŻNE: Nie bierz kursów poniżej 1.30 do kuponów AKO (ryzyko nieadekwatne do wartości). Preferuj typy z EV>0."""
+
+    return _zapytaj_typera(prompt, max_tokens=1000)
+
+
+def ai_sprawdz_kupon(picks_text: str, stawka: float = 5.0, wzorzec_ml: list = None) -> str:
+    """
+    Groq ocenia kupon bukmacherski podany przez użytkownika.
+
+    picks_text – tekst z typami np:
+        "PSG 1X @1.31, Bayern wygrana @1.55, Leverkusen 1 @1.88"
+    stawka     – stawka na kupon (PLN)
+    wzorzec_ml – opcjonalnie lista pewniaczków z Bzzoiro (dla cross-walidacji)
+
+    Zwraca: tekstowa ocena kuponu z EV, ryzykami i rekomendacją.
+    """
+    # Kontekst ML jeśli dostępny
+    ml_kontekst = ""
+    if wzorzec_ml:
+        mecze_ml = []
+        for w in wzorzec_ml[:15]:
+            g, a = w.get("gospodarz", ""), w.get("goscie", "")
+            pw, pr, pp = w.get("pw", 0), w.get("pr", 0), w.get("pp", 0)
+            bt, o25 = w.get("bt", 0), w.get("o25", 0)
+            odds = w.get("odds") or {}
+            mecze_ml.append(
+                f"  {g} vs {a}: 1={pw:.0f}% X={pr:.0f}% 2={pp:.0f}% "
+                f"BTTS={bt:.0f}% O2.5={o25:.0f}% | "
+                f"kurs: 1={odds.get('home','–')} X={odds.get('draw','–')} 2={odds.get('away','–')}"
+            )
+        ml_kontekst = "\nDANE ML (Bzzoiro CatBoost) dla zbliżonych meczów:\n" + "\n".join(mecze_ml)
+
+    prompt = f"""Oceń poniższy kupon bukmacherski jako doświadczony analityk.
+
+KUPON DO OCENY (stawka: {stawka:.2f} PLN):
+{picks_text}
+
+PODATEK: 12% zryczałtowany. Wzór netto: {stawka} × kurs_łączny × 0.88
+{ml_kontekst}
+
+OCENA (odpowiedz po polsku):
+
+1. KAŻDE ZDARZENIE:
+   - Typ i kurs
+   - Ocena kursu vs prawdopodobieństwo ML (jeśli dostępne): EV+/EV-/brak danych
+   - Ryzyko: NISKIE / ŚREDNIE / WYSOKIE
+
+2. PODSUMOWANIE KUPONU:
+   - Łączny kurs (oblicz)
+   - Oczekiwana wygrana netto po podatku 12%
+   - Ogólna ocena kuponu: ✅ WARTOŚCIOWY / ⚡ PRZECIĘTNY / ❌ RYZYKOWNY
+
+3. REKOMENDACJA:
+   - Co zmienić jeśli kupon jest słaby
+   - Czy stawiać? (krótko 1 zdanie)"""
+
+    return _zapytaj_typera(prompt, max_tokens=800)
+
+
+def ai_groq_dostepny() -> bool:
+    """Sprawdza czy Groq API jest dostępne (klucz w .env)."""
+    return bool(os.getenv("GROQ_API_KEY", "").strip())
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from footstats.utils.console import console
 from footstats.utils.helpers import _s
 from footstats.config import PEWNIACZEK_PROG
 from footstats.scrapers.bzzoiro import BzzoiroClient, _bzz_parse_prob
+from footstats.core.weekly_picks import _typy_pewne
 
 #  MODUL 13d – SZYBKIE PEWNIACZKI (2 DNI) + SCOUT BOT  (v2.7.1)
 # ================================================================

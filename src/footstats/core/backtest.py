@@ -1,15 +1,15 @@
 """
-backtest_db.py – SQLite baza do śledzenia skuteczności typów AI FootStats
+backtest.py – SQLite baza do śledzenia skuteczności typów AI FootStats
 
 Użycie CLI:
-    python backtest_db.py stats              → statystyki ostatnich 30 dni
-    python backtest_db.py stats 90           → statystyki ostatnich 90 dni
-    python backtest_db.py pending            → mecze bez wpisanego wyniku
-    python backtest_db.py update 42 "2-1"   → wpisz wynik do rekordu ID=42
-    python backtest_db.py weakness           → raport słabych punktów
+    python -m footstats.core.backtest stats              → statystyki ostatnich 30 dni
+    python -m footstats.core.backtest stats 90           → statystyki ostatnich 90 dni
+    python -m footstats.core.backtest pending            → mecze bez wpisanego wyniku
+    python -m footstats.core.backtest update 42 "2-1"   → wpisz wynik do rekordu ID=42
+    python -m footstats.core.backtest weakness           → raport słabych punktów
 
 Użycie jako moduł:
-    from backtest_db import save_prediction, update_result, get_stats
+    from footstats.core.backtest import save_prediction, update_result, get_stats
 """
 
 import json
@@ -32,12 +32,14 @@ except ImportError:
             lines.append("  ".join(str(c).ljust(14) for c in row))
         return "\n".join(lines)
 
-DB_PATH = Path(__file__).parent / "footstats_backtest.db"
+# DB w katalogu data/ na poziomie projektu (F:\bot\data\footstats_backtest.db)
+DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
 
 
 # ── Inicjalizacja ─────────────────────────────────────────────────────────
 
 def _connect() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -176,24 +178,7 @@ def save_prediction(
     prompt_version:       str  = "",
 ) -> int:
     """
-    Zapisuje typ AI przed meczem.
-
-    Zwraca id nowo utworzonego rekordu.
-
-    Przykład:
-        mid = save_prediction(
-            match_date="2026-03-30",
-            team_home="Arsenal",
-            team_away="Chelsea",
-            ai_tip="Over 2.5",
-            ai_confidence=72,
-            league="Premier League",
-            ai_reasoning="Obie drużyny strzelają ponad 1.8 xG...",
-            odds=1.85,
-            kupon_type="A",
-            kodeks_rules_checked=["forma_5", "h2h", "kontuzje"],
-            prompt_version="v2.1",
-        )
+    Zapisuje typ AI przed meczem. Zwraca id nowo utworzonego rekordu.
     """
     init_db()
     rules_json = json.dumps(kodeks_rules_checked or [], ensure_ascii=False)
@@ -219,10 +204,7 @@ def save_prediction(
 def update_result(match_id: int, actual_result: str) -> dict:
     """
     Wpisuje wynik po meczu i automatycznie oblicza tip_correct.
-
     actual_result: np. "2-1", "0-0", "1", "X", "2"
-
-    Zwraca dict z informacją o rekordzie i czy typ był trafiony.
     """
     init_db()
     with _connect() as conn:
@@ -234,7 +216,7 @@ def update_result(match_id: int, actual_result: str) -> dict:
         if not row:
             raise ValueError(f"Rekord ID={match_id} nie istnieje.")
         if row["actual_result"] is not None:
-            print(f"[BacktestDB] Nadpisuję istniejący wynik (poprzedni: {row['actual_result']})")
+            print(f"[Backtest] Nadpisuję istniejący wynik (poprzedni: {row['actual_result']})")
 
         tip_correct = _oblicz_tip_correct(row["ai_tip"], actual_result)
 
@@ -256,15 +238,7 @@ def update_result(match_id: int, actual_result: str) -> dict:
 # ── 3. get_stats ─────────────────────────────────────────────────────────
 
 def get_stats(days: int = 30) -> dict:
-    """
-    Zwraca statystyki za ostatnie N dni.
-
-    Klucze zwracanego dict:
-        total_tips, evaluated, accuracy_pct, roi_pct,
-        by_market, by_league, by_kupon, by_confidence_band,
-        best_market, worst_market, best_league,
-        date_from, date_to
-    """
+    """Zwraca statystyki skuteczności za ostatnie N dni."""
     init_db()
     date_from = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     date_to   = datetime.now().strftime("%Y-%m-%d")
@@ -291,11 +265,8 @@ def get_stats(days: int = 30) -> dict:
 
     evaluated   = [r for r in rows if r["tip_correct"] is not None]
     correct     = [r for r in evaluated if r["tip_correct"] == 1]
-
     accuracy    = (len(correct) / len(evaluated) * 100) if evaluated else None
 
-    # ROI = (suma wygranych – suma postawionych) / suma postawionych * 100
-    # Zakładamy 1 jednostkę na każdy typ
     roi_num = sum(
         (r["odds"] - 1) if r["tip_correct"] == 1 else -1
         for r in evaluated if r["odds"]
@@ -328,7 +299,6 @@ def get_stats(days: int = 30) -> dict:
     by_league = _group_stats(lambda r: r["league"] or "Nieznana")
     by_kupon  = _group_stats(lambda r: r["kupon_type"] or "Brak")
 
-    # Pasma pewności: 0-49, 50-64, 65-79, 80-100
     def _conf_band(r):
         c = r["ai_confidence"]
         if c < 50:   return "0-49%"
@@ -338,7 +308,6 @@ def get_stats(days: int = 30) -> dict:
 
     by_conf = _group_stats(_conf_band)
 
-    # Best/worst market i best league (min 3 typy)
     def _best_worst(group_dict):
         filtered = {k: v for k, v in group_dict.items() if v["total"] >= 3}
         if not filtered:
@@ -351,30 +320,27 @@ def get_stats(days: int = 30) -> dict:
     best_league, _            = _best_worst(by_league)
 
     return {
-        "total_tips":        len(rows),
-        "evaluated":         len(evaluated),
-        "correct":           len(correct),
-        "accuracy_pct":      round(accuracy, 1) if accuracy is not None else None,
-        "roi_pct":           round(roi, 1) if roi is not None else None,
-        "by_market":         by_market,
-        "by_league":         by_league,
-        "by_kupon":          by_kupon,
+        "total_tips":         len(rows),
+        "evaluated":          len(evaluated),
+        "correct":            len(correct),
+        "accuracy_pct":       round(accuracy, 1) if accuracy is not None else None,
+        "roi_pct":            round(roi, 1) if roi is not None else None,
+        "by_market":          by_market,
+        "by_league":          by_league,
+        "by_kupon":           by_kupon,
         "by_confidence_band": by_conf,
-        "best_market":       best_market,
-        "worst_market":      worst_market,
-        "best_league":       best_league,
-        "date_from":         date_from,
-        "date_to":           date_to,
+        "best_market":        best_market,
+        "worst_market":       worst_market,
+        "best_league":        best_league,
+        "date_from":          date_from,
+        "date_to":            date_to,
     }
 
 
 # ── 4. get_pending_results ────────────────────────────────────────────────
 
 def get_pending_results() -> list[dict]:
-    """
-    Zwraca listę meczów, dla których nie wpisano jeszcze wyniku.
-    Sortuje malejąco po dacie meczu (najpilniejsze pierwsze).
-    """
+    """Mecze bez wpisanego wyniku, sortowane malejąco po dacie."""
     init_db()
     with _connect() as conn:
         rows = conn.execute(
@@ -392,16 +358,7 @@ def get_pending_results() -> list[dict]:
 # ── 5. get_weakness_report ────────────────────────────────────────────────
 
 def get_weakness_report(min_samples: int = 3, days: int = 90) -> dict:
-    """
-    Analizuje słabe punkty: typy, ligi i pasma kursów z najniższą skutecznością.
-
-    min_samples – minimalna liczba ocenionych typów żeby wziąć pod uwagę
-    days        – zakres dni do analizy
-
-    Zwraca dict z kluczami:
-        weak_markets, weak_leagues, weak_odds_bands, strong_markets, strong_leagues
-        każdy element to lista dict: {"name", "total", "correct", "accuracy_pct", "avg_odds"}
-    """
+    """Analizuje słabe punkty: typy i ligi z najniższą skutecznością."""
     stats = get_stats(days=days)
 
     def _rank(group_dict, ascending=True) -> list[dict]:
@@ -412,10 +369,6 @@ def get_weakness_report(min_samples: int = 3, days: int = 90) -> dict:
         ]
         return sorted(items, key=lambda x: x["accuracy_pct"], reverse=not ascending)
 
-    by_market = stats["by_market"]
-    by_league = stats["by_league"]
-
-    # Pasma kursów – tworzymy je z nowych danych
     init_db()
     date_from = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
     with _connect() as conn:
@@ -454,10 +407,10 @@ def get_weakness_report(min_samples: int = 3, days: int = 90) -> dict:
     ]
 
     return {
-        "weak_markets":   _rank(by_market, ascending=True)[:5],
-        "strong_markets": _rank(by_market, ascending=False)[:5],
-        "weak_leagues":   _rank(by_league, ascending=True)[:5],
-        "strong_leagues": _rank(by_league, ascending=False)[:5],
+        "weak_markets":   _rank(stats["by_market"], ascending=True)[:5],
+        "strong_markets": _rank(stats["by_market"], ascending=False)[:5],
+        "weak_leagues":   _rank(stats["by_league"], ascending=True)[:5],
+        "strong_leagues": _rank(stats["by_league"], ascending=False)[:5],
         "odds_bands":     sorted(odds_bands, key=lambda x: x["name"]),
         "days_analyzed":  days,
     }
@@ -547,8 +500,7 @@ def _cli_pending():
         print(tabulate(rows,
                        headers=["ID", "Data", "Mecz", "Liga", "Typ", "Pew.", "Kurs", "Kupon"],
                        tablefmt="simple"))
-        print(f"\n  Użyj: python backtest_db.py update <ID> <WYNIK>")
-        print(f"  Np.:  python backtest_db.py update 42 \"2-1\"")
+        print(f"\n  Użyj: python -m footstats.core.backtest update <ID> <WYNIK>")
     print()
 
 
@@ -558,13 +510,11 @@ def _cli_update(match_id_str: str, actual_result: str):
     except ValueError:
         print(f"[Błąd] ID musi być liczbą całkowitą, otrzymano: {match_id_str!r}")
         sys.exit(1)
-
     try:
         info = update_result(match_id, actual_result)
     except ValueError as e:
         print(f"[Błąd] {e}")
         sys.exit(1)
-
     print(f"\n  Zaktualizowano ID={info['id']}")
     print(f"  Typ AI:         {info['ai_tip']}")
     print(f"  Wynik meczu:    {info['actual_result']}")
@@ -610,10 +560,10 @@ def _cli_weakness():
 def _cli_help():
     print("""
 Użycie:
-  python backtest_db.py stats [dni]          — statystyki (domyślnie 30 dni)
-  python backtest_db.py pending              — mecze bez wpisanego wyniku
-  python backtest_db.py update <ID> <wynik>  — wpisz wynik (np. "2-1", "X", "1")
-  python backtest_db.py weakness [dni]       — raport słabości (domyślnie 90 dni)
+  python -m footstats.core.backtest stats [dni]          — statystyki (domyślnie 30 dni)
+  python -m footstats.core.backtest pending              — mecze bez wpisanego wyniku
+  python -m footstats.core.backtest update <ID> <wynik>  — wpisz wynik (np. "2-1", "X", "1")
+  python -m footstats.core.backtest weakness [dni]       — raport słabości (domyślnie 90 dni)
 """)
 
 
@@ -622,26 +572,17 @@ if __name__ == "__main__":
 
     if not args or args[0] in ("-h", "--help", "help"):
         _cli_help()
-
     elif args[0] == "stats":
-        days = int(args[1]) if len(args) > 1 else 30
-        _cli_stats(days)
-
+        _cli_stats(int(args[1]) if len(args) > 1 else 30)
     elif args[0] == "pending":
         _cli_pending()
-
     elif args[0] == "update":
         if len(args) < 3:
-            print("[Błąd] Podaj ID i wynik: python backtest_db.py update 42 \"2-1\"")
+            print("[Błąd] Podaj ID i wynik: python -m footstats.core.backtest update 42 \"2-1\"")
             sys.exit(1)
         _cli_update(args[1], args[2])
-
     elif args[0] == "weakness":
-        days = int(args[1]) if len(args) > 1 else 90
-        r = get_weakness_report(days=days)
-        r["days_analyzed"] = days
         _cli_weakness()
-
     else:
         print(f"[Błąd] Nieznana komenda: {args[0]!r}")
         _cli_help()
