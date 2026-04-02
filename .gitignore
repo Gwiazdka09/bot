@@ -27,6 +27,9 @@ ai_analiza_*.json
 .cache/
 cache/
 
+# ── Claude Code
+.claude/settings.local.json
+
 # ── Dane (DB backtest)
 data/
 
