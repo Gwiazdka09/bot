@@ -5,3 +5,11 @@ BZZOIRO_KEY=""
 
 # Rejestracja: https://console.groq.com
 GROQ_API_KEY=wpisz_tutaj_nowy_klucz_z_console_groq_com
+
+# STS Strefa Inspiracji (scrapers/sts.py)
+STS_LOGIN=twoj@email.com
+STS_HASLO=twoje_haslo
+
+# Superbet SuperSocial (scrapers/superbet.py)
+SUPERBET_LOGIN=twoj@email.com
+SUPERBET_PASSWORD=twoje_haslo
