@@ -54,6 +54,76 @@ from footstats.ai.analyzer import (
     ai_analiza_pewniaczki, ai_sprawdz_kupon, ai_groq_dostepny,
 )
 
+
+def _wyswietl_ai_pewniaczki(dane: dict, stawka: float = 5.0):
+    """Renderuje wynik JSON z ai_analiza_pewniaczki() za pomocą Rich."""
+    if "top3" not in dane:
+        raw = dane.get("_raw") or dane.get("uzasadnienie") or str(dane)
+        console.print(Panel(
+            str(raw),
+            title="[bold yellow]🤖 AI – Analiza Pewniaczków + Kupony[/bold yellow]",
+            border_style="yellow",
+            padding=(1, 2),
+        ))
+        return
+
+    # TOP 3
+    tbl = Table(
+        title="🥇 TOP 3 Pojedyncze Typy",
+        box=box.SIMPLE_HEAVY,
+        show_header=True,
+        header_style="bold yellow",
+        padding=(0, 1),
+    )
+    tbl.add_column("Mecz", style="cyan", no_wrap=True, max_width=32)
+    tbl.add_column("Typ", style="bold white", justify="center", width=6)
+    tbl.add_column("Kurs", justify="right", width=6)
+    tbl.add_column("EV netto", justify="right", width=10)
+    tbl.add_column("Uzasadnienie", style="dim")
+
+    for t in dane.get("top3", []):
+        ev = t.get("ev_netto")
+        try:
+            ev_str = f"[green]+{float(ev):.1f}%[/green]" if ev is not None and float(ev) > 0 else f"[red]{float(ev):.1f}%[/red]"
+        except (TypeError, ValueError):
+            ev_str = str(ev) if ev is not None else "?"
+        tbl.add_row(
+            t.get("mecz", "?"),
+            t.get("typ", "?"),
+            str(t.get("kurs", "?")),
+            ev_str,
+            t.get("uzasadnienie", ""),
+        )
+    console.print(tbl)
+
+    def _kupon_panel(kupon: dict, title: str, color: str):
+        if not kupon:
+            return
+        lines = []
+        for z in kupon.get("zdarzenia", []):
+            lines.append(f"  {z.get('nr', '?')}. {z.get('mecz', '?')}  [bold]{z.get('typ', '?')}[/bold] @ {z.get('kurs', '?')}")
+        kl = kupon.get("kurs_laczny", "?")
+        wn = kupon.get("wygrana_netto", "?")
+        lines.append(f"\n  Kurs łączny: [bold]{kl}[/bold]  →  Stawka {stawka:.0f} PLN  →  [bold green]~{wn} PLN netto[/bold green]")
+        console.print(Panel(
+            "\n".join(lines),
+            title=f"[bold {color}]{title}[/bold {color}]",
+            border_style=color,
+            padding=(0, 1),
+        ))
+
+    _kupon_panel(dane.get("kupon_a"), "💰 KUPON A  (~50 PLN)", "green")
+    _kupon_panel(dane.get("kupon_b"), "🚀 KUPON B  (~100 PLN)", "magenta")
+
+    ost = dane.get("ostrzezenia")
+    if ost:
+        console.print(Panel(
+            f"[yellow]{ost}[/yellow]",
+            title="[bold red]⚠️  Ryzyka[/bold red]",
+            border_style="red",
+            padding=(0, 2),
+        ))
+
 #  MODUL 18 - GLOWNA PETLA
 # ================================================================
 
@@ -83,12 +153,7 @@ def _ai_blok_pewniaczki(wyniki_p: list):
                       console=console, transient=True) as pg:
             pg.add_task("", total=None)
             analiza = ai_analiza_pewniaczki(wyniki_p)
-        console.print(Panel(
-            analiza,
-            title="[bold yellow]🤖 AI – Analiza Pewniaczków + Kupony[/bold yellow]",
-            border_style="yellow",
-            padding=(1, 2),
-        ))
+        _wyswietl_ai_pewniaczki(analiza)
     except Exception as e:
         console.print(f"[red]AI blad: {e}[/red]")
         return

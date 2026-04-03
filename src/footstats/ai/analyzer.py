@@ -11,6 +11,7 @@ Moduły:
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 
 # Importy z pakietu footstats
@@ -19,15 +20,91 @@ from footstats.scrapers.kursy import szukaj_kursy_meczu, scrape_betexplorer, pok
 
 
 # ── Wyspecjalizowany prompt typerski ────────────────────────────────────────
-_SYSTEM_TYPER = (
-    "Jesteś doświadczonym analitykiem bukmacherskim z 10-letnim stażem. "
-    "Specjalizujesz się w typowaniu piłkarskim na rynku polskim. "
-    "Zawsze odpowiadasz po polsku. Znasz podatek 12% zryczałtowany (netto = stawka × kurs × 0.88). "
-    "Analizujesz EV (Expected Value), formy drużyn i dane ML. "
-    "Jesteś sceptyczny wobec kuponów z >5 zdarzeniami – ryzyko rośnie wykładniczo. "
-    "Preferujesz value bety (EV>0) nad bezrefleksyjnymi faworytami z niskim kursem. "
-    "Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po."
-)
+_SYSTEM_TYPER = """Jesteś analitykiem bukmacherskim. Odpowiadasz zawsze po polsku, konkretnie i zwięźle.
+Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po.
+
+== PODATEK ==
+Polska: 12% zryczałtowany od wygranej brutto.
+Wzór: wygrana_netto = stawka x kurs_laczny x 0.88
+EV_netto = P_model x kurs x 0.88 - 1.0
+Typ ma wartosc gdy EV_netto > 0.
+Prog rentownosci per kurs: 1.20=92%, 1.28=89%, 1.35=84%, 1.50=76%, 1.75=65%, 2.00=57%.
+
+== DANE BZZOIRO ==
+Bzzoiro ML (CatBoost) systematycznie zawyza pewnosc ~8-9% wzgledem rynku.
+Gdy ML=85%, realnie traktuj jako ~76-77%. Uwzgledniaj przy ocenie EV.
+ROZBIÉZNOSC: gdy Poisson vs ML roznia sie >20% – modele sie kloca, mecz nieprzewidywalny.
+Przy ROZBIÉZNOSCI: nie wkladaj do AKO. Single z mniejsza stawka ew. do rozwazen.
+
+== CZYNNIKI WZMACNIAJACE (mocniejszy sygnal) ==
+PATENT H2H: druzyna wygrala wszystkie ostatnie H2H – przewaga psychologiczna i taktyczna.
+TWIERDZA: gospodarz nie przegral u siebie od 5+ meczow – obrona statystycznie silniejsza.
+HIGH_STAKES_TOP / FINAL_TOP: walka o tytul/CL – motywacja maksymalna, atak +20%.
+FINAL_RELEGATION: walka o utrzymanie – desperacja, atak +20%, ale mozliwy chaos taktyczny.
+HISTORIA (RAG): gdy dane pokazuja np. "PATENT+TWIERDZA->1: 7/8(87%)" – traktuj jako mocny dowod.
+Poisson i ML zgodne (brak ROZBIÉZNOSCI) + czynnik wzmacniajacy = mocny sygnal.
+
+== CZYNNIKI OSTRZEGAWCZE (slabszy sygnal lub odpusc) ==
+ROTACJA: CL za <4 dni – kadra niepewna, atak -20%. Unikaj 1/X/2. Over moze byc OK.
+ZMECZENIE: gral <72h temu – obrona slabsza, Over bardziej prawdopodobny niz wynik.
+COMFORT / VACATION: srodek tabeli bez stawek – motywacja -10%. Nie jako podstawa AKO.
+Pewnosc modelu <50% (malo danych H2H) – typujemy w ciemno, obnizaj zaufanie.
+
+== KURS MINIMALNY – ZASADA KOTWICY ==
+< 1.20  : NIGDY. Za maly margines bezpieczenstwa, blad modelu = automatyczna strata.
+1.20-1.35: KOTWICA – tylko gdy pewnosc modelu >= 90% (np. PSG w domu vs slaby rywal,
+           Over 1.5 gdy obie druzyny strzelaja regularnie, wynik klasy A vs D).
+           EV przy 1.23 i P=93%: 0.93x1.23x0.88-1 = +0.7% – ledwo na plusie, wiec pewnosc musi byc pewna.
+> 1.35  : standard, liczymy EV_netto normalnie.
+
+== BUDOWANIE KUPONU AKO ==
+Cel: wlasciwy kurs laczny, nie liczba zdarzen. Optymalna liczba: 4-6 zdarzen.
+Struktura "kotwica + wartosc": 1-2 tanich pewnych zdarzen (1.20-1.40, pewnosc >=90%)
+  + 3-4 wartosciowych zdarzen (1.50-2.00, EV_netto > 3%).
+Max 2 mecze tej samej ligi w kuponie (korelacja dnia/pogody/sedziow).
+Nie lacze typow z tego samego meczu (np. "1" i "Over" z PSG – oba ida w gore lub dol razem).
+Kazde zdarzenie musi miec wlasne uzasadnienie – nie "dolaczone dla kursu".
+Nie wkladaj meczow z ROTACJA, ZMECZENIE obu druzyn, ani ROZBIÉZNOSC.
+
+== STAWKI (stale stawki, flat betting) ==
+Kupon A (kurs ~11-14):  10 PLN – bardziej pewny, nizsza stawka na ryzyko
+Kupon B (kurs ~20-30):   5 PLN – wyzsze ryzyko = nizsza stawka
+Single value bet:       10-15 PLN gdy EV_netto > 5% i brak czynnikow ostrzegawczych
+Eksperymentalny (>30):   2-3 PLN
+Zasada: nie zmieniaj stawki po wygranej ani po stracie. Emocje to najgorszy doradca.
+
+== DOBOR TYPOW ==
+Over 2.5: mocny sygnal gdy lambda_g + lambda_a > 2.8 (Poisson). Sprawdz BTTS jako potwierdzenie.
+Over 1.5: kotwica gdy obie druzyny strzelajace, pewnosc >=95%. Bezpieczne "dokladanie" do AKO.
+Under 2.5: lambda_g + lambda_a < 2.0, obie defensywne, brak HIGH_STAKES (bo desperacja = gole).
+BTTS: oba ataki w formie, zadna druzyna nie ma COMFORT/VACATION (bo te druzyny nie ryzykuja).
+1/X/2: EV_netto > 3%, brak ROTACJA/ZMECZENIE, Poisson i ML zgodne.
+1X / X2: bezpieczniejsze ale niskie kursy – tylko gdy EV_netto > 0 po podatku.
+
+== PRZYKLADY (kalibracja) ==
+KOTWICA OK:
+  PSG vs Toulouse | ML 1=91% | kurs=1.28
+  EV_netto = 0.91x1.28x0.88-1 = +2.5% – PSG w domu, klasa A vs D, pewnosc >= 90%. Moze byc kotwica.
+
+DOBRY TYP:
+  Bayern vs Augsburg | TWIERDZA(Bayern 9m) | ML 1=82% | kurs=1.48
+  EV_netto = 0.82x1.48x0.88-1 = +6.8% WARTOSC
+
+ZLY TYP (pulapka kursu):
+  PSG vs Metz | ML 1=91% | kurs=1.18 – ponizej progu 1.20. NIGDY.
+
+PULAPKA ROZBIÉZNOSCI:
+  Liverpool vs Chelsea | Poisson=72% vs ML=51% | ROZBIÉZNOSC +21%
+  Modele sie kloca. Nie wkladaj do AKO.
+
+ROTACJA W AKO:
+  Man City (ROTACJA – CL za 3 dni) | ML 1=78% | kurs=1.55
+  Nie bierz do AKO. Rotacja kadry kasuje statystyke.
+
+HISTORIA RAG:
+  Bayern vs Dortmund | PATENT+TWIERDZA | HISTORIA: PATENT+TWIERDZA->1: 7/8(87%)
+  Historycznie ten wzorzec trafia 87% – mocny dowod na "1".
+"""
 
 
 def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
@@ -346,83 +423,458 @@ def _tryb_interaktywny():
 #  AI + PEWNIACZKI – analiza listy typów i builder kuponów
 # ════════════════════════════════════════════════════════════════════
 
-def ai_analiza_pewniaczki(wyniki: list) -> str:
+def _buduj_opis_meczu(w: dict) -> str:
     """
-    Groq analizuje listę pewniaczków z Bzzoiro ML.
+    Buduje bogaty kontekst meczu dla Groq.
 
-    Wejście: lista zwrócona przez szybkie_pewniaczki_2dni()
-    Wyjście: sformatowany tekst z:
-      - TOP 3 najlepszymi typami (EV + pewność)
-      - Propozycją kuponu ~50 PLN netto (5 PLN stawka)
-      - Propozycją kuponu ~100 PLN netto (5 PLN stawka)
-      - Głównymi ryzykami
+    Obsługuje dwa formaty wejściowe:
+      - quick_picks: flat pw/pr/pp/bt/o25 + odds + scout
+      - weekly_picks: nested pred (lambda, czynniki, pewnosc) + bzz_info
+    """
+    g      = w.get("gospodarz", "?")
+    a      = w.get("goscie", "?")
+    liga   = w.get("liga", "?")
+    data   = w.get("data", "")
+    godz   = w.get("godzina", "–")
+    metoda = w.get("metoda", "ML")
+    pred   = w.get("pred") or {}
+
+    # Dane probabilistyczne — Poisson trzyma je w pred, ML na poziomie głównym
+    if metoda == "POISSON" and pred:
+        pw  = pred.get("p_wygrana",   0)
+        pr  = pred.get("p_remis",     0)
+        pp  = pred.get("p_przegrana", 0)
+        bt  = pred.get("btts",        0)
+        o25 = pred.get("over25",      0)
+        lambda_g = pred.get("lambda_g")
+        lambda_a = pred.get("lambda_a")
+        pewnosc  = pred.get("pewnosc", 0)
+    else:
+        pw  = w.get("pw",  0) or pred.get("p_wygrana",   0)
+        pr  = w.get("pr",  0) or pred.get("p_remis",     0)
+        pp  = w.get("pp",  0) or pred.get("p_przegrana", 0)
+        bt  = w.get("bt",  0) or pred.get("btts",        0)
+        o25 = w.get("o25", 0) or pred.get("over25",      0)
+        lambda_g = None
+        lambda_a = None
+        pewnosc  = pred.get("pewnosc", 55)
+
+    linie = [f"• {g} vs {a} [{liga}] {data} {godz}  [metoda:{metoda}]"]
+
+    # Lambdy Poissona + dominacja atakiem
+    if lambda_g and lambda_a and lambda_a > 0:
+        ratio = round(lambda_g / lambda_a, 2)
+        if ratio >= 1.5:
+            dom = f" → {g[:10]} dominuje ({ratio}x)"
+        elif ratio <= 0.67:
+            dom = f" → {a[:10]} dominuje ({round(1/ratio, 2)}x)"
+        else:
+            dom = " → wyrównane"
+        linie.append(f"  POISSON: λg={lambda_g} λa={lambda_a}{dom}")
+
+    # Prawdopodobieństwa ML
+    linie.append(
+        f"  ML: 1={pw:.0f}% X={pr:.0f}% 2={pp:.0f}%"
+        f" | BTTS={bt:.0f}% | Over2.5={o25:.0f}%"
+    )
+
+    # Cross-walidacja Poisson vs Bzzoiro (tylko tygodniowe)
+    bzz_info = w.get("bzz_info") or {}
+    cross    = bzz_info.get("cross") or {}
+    if cross and metoda == "POISSON":
+        ml_1 = cross.get("ml_1", 0)
+        if ml_1:
+            diff = round(pw - ml_1, 1)
+            kierunek = "Poisson wyżej" if diff > 0 else "ML wyżej"
+            alert = " ⚠️ROZBIEŻNOŚĆ" if cross.get("alert") else ""
+            linie.append(
+                f"  PORÓWNANIE: Poisson={pw:.0f}% vs Bzz={ml_1:.0f}%"
+                f" ({diff:+.0f}% {kierunek}){alert}"
+            )
+
+    # Czynniki analityczne — tylko predykcje Poissona
+    if metoda == "POISSON" and pred:
+        h2h_g      = pred.get("h2h_g",      {}) or {}
+        heur_g     = pred.get("heur_g",     {}) or {}
+        heur_a     = pred.get("heur_a",     {}) or {}
+        fortress_g = pred.get("fortress_g", {}) or {}
+        imp_g      = pred.get("imp_g",      {}) or {}
+        imp_a      = pred.get("imp_a",      {}) or {}
+
+        czynniki = []
+        n_h2h = h2h_g.get("n_h2h", 0)
+        if h2h_g.get("patent"):
+            czynniki.append(f"PATENT({g[:8]} {n_h2h}/{n_h2h} H2H)")
+        if h2h_g.get("zemsta"):
+            czynniki.append(f"ZEMSTA({g[:8]})")
+        if fortress_g.get("fortress"):
+            czynniki.append(f"TWIERDZA({g[:8]} {fortress_g.get('seria', 5)}m dom)")
+        if heur_g.get("rotacja"):
+            czynniki.append(f"ROTACJA({g[:8]})")
+        if heur_g.get("zmeczenie"):
+            czynniki.append(f"ZMECZENIE({g[:8]})")
+        if heur_a.get("rotacja"):
+            czynniki.append(f"ROTACJA({a[:8]})")
+        if heur_a.get("zmeczenie"):
+            czynniki.append(f"ZMECZENIE({a[:8]})")
+        if czynniki:
+            linie.append(f"  CZYNNIKI: {' | '.join(czynniki)}")
+
+        # Importance Index (pomijamy NORMAL — to szum)
+        sg = imp_g.get("status", "NORMAL")
+        sa = imp_a.get("status", "NORMAL")
+        if sg != "NORMAL" or sa != "NORMAL":
+            def _skroc_kom(kom: str) -> str:
+                # Bierz część po " – " jeśli istnieje, max 45 znaków
+                return (kom.split("–")[-1].strip() if "–" in kom else kom)[:45]
+            opis_g = f"{g[:8]}={sg}"
+            if sg != "NORMAL":
+                opis_g += f"({_skroc_kom(imp_g.get('komentarz', ''))})"
+            opis_a = f"{a[:8]}={sa}"
+            if sa != "NORMAL":
+                opis_a += f"({_skroc_kom(imp_a.get('komentarz', ''))})"
+            linie.append(f"  WAŻNOŚĆ: {opis_g} | {opis_a}")
+
+        # Forma — pkt/mecz jako sygnał trendu
+        fg = pred.get("forma_g", 0)
+        fa = pred.get("forma_a", 0)
+        if fg or fa:
+            linie.append(f"  FORMA(pkt/m): {g[:8]}={fg:.2f}  {a[:8]}={fa:.2f}")
+
+        linie.append(f"  PEWNOŚĆ: {pewnosc}% (n_h2h={n_h2h})")
+
+    # Forma z SofaScore — W/D/L + gole + kontuzje (wzbogacona przez _wzbogac_forme)
+    sofa_g = w.get("sofa_forma_g")
+    sofa_a = w.get("sofa_forma_a")
+    if sofa_g or sofa_a:
+        linie.append(
+            f"  FORMA_SOFA: {g[:8]}={sofa_g or '?'}  {a[:8]}={sofa_a or '?'}"
+        )
+    inj_g = w.get("sofa_kontuzje_g")
+    inj_a = w.get("sofa_kontuzje_a")
+    if inj_g or inj_a:
+        czesci = []
+        if inj_g:
+            czesci.append(f"{g[:8]}: {inj_g}")
+        if inj_a:
+            czesci.append(f"{a[:8]}: {inj_a}")
+        linie.append(f"  KONTUZJE: {' | '.join(czesci)}")
+
+    # Kursy bukmacherskie
+    odds = (
+        w.get("odds")
+        or (bzz_info.get("odds") if bzz_info else None)
+        or pred.get("odds")
+        or {}
+    )
+    if isinstance(odds, dict):
+        k1 = odds.get("home"); kx = odds.get("draw"); k2 = odds.get("away")
+        if k1 or kx or k2:
+            linie.append(f"  KURSY: 1={k1 or '–'} X={kx or '–'} 2={k2 or '–'}")
+            # EV brutto (bez podatku) — AI uwzględni 12% we własnej analizie
+            ev_parts = []
+            for label, p_val, kurs_raw in [
+                ("1",    pw  / 100, k1),
+                ("X",    pr  / 100, kx),
+                ("2",    pp  / 100, k2),
+                ("BTTS", bt  / 100, odds.get("btts")),
+                ("O2.5", o25 / 100, odds.get("over_2_5")),
+            ]:
+                try:
+                    k = float(str(kurs_raw).replace(",", "."))
+                    ev = p_val * k - 1.0
+                    if ev > 0.0:
+                        ev_parts.append(f"{label}={ev * 100:+.0f}%")
+                except (ValueError, TypeError):
+                    pass
+            if ev_parts:
+                linie.append(f"  EV(brutto): {' '.join(ev_parts)}")
+
+    # Scout Bot EV — format quick_picks
+    scout = w.get("scout") or {}
+    if scout:
+        wartosciowe = sorted(
+            [oc for oc in scout.get("oceny", []) if oc.get("ev") and oc["ev"] > 0.03],
+            key=lambda x: -x["ev"],
+        )
+        if wartosciowe:
+            ev_str = " | ".join(
+                f"{oc['typ'][:14]}={oc['ev'] * 100:+.0f}%"
+                for oc in wartosciowe[:3]
+            )
+            linie.append(f"  SCOUT_EV: {ev_str}")
+
+    # Etap 7: RAG — historyczne wzorce dla tych czynników
+    try:
+        from footstats.ai.rag import pobierz_rag_kontekst
+        rag = pobierz_rag_kontekst(w)
+        if rag:
+            linie.append(f"  HISTORIA: {rag}")
+    except Exception:
+        pass
+
+    return "\n".join(linie)
+
+
+def _wzbogac_forme(wyniki: list, top_n: int = 5) -> None:
+    """
+    Etap 4: Próbuje wzbogacić TOP N meczów o formę z SofaScore (Playwright).
+    Modyfikuje wyniki in-place, dodając klucze sofa_forma_g/a i sofa_kontuzje_g/a.
+    Bezpieczna — gdy Playwright niedostępny lub SofaScore błąd, po prostu pomija.
+    """
+    try:
+        from footstats.scrapers.form_scraper import pobierz_forme_meczu, PLAYWRIGHT_OK
+        if not PLAYWRIGHT_OK:
+            return
+    except ImportError:
+        return
+
+    # TOP N: priorytet Poisson (dokładniejsze), potem najwyższa pewność/szansa
+    posortowane = sorted(
+        range(min(len(wyniki), 20)),
+        key=lambda i: (
+            0 if wyniki[i].get("metoda") == "POISSON" else 1,
+            -(wyniki[i].get("pred", {}) or {}).get("pewnosc", 0),
+            -(max((v for _, v in wyniki[i].get("typy", [(None, 0)])), default=0)),
+        ),
+    )[:top_n]
+
+    for idx in posortowane:
+        w = wyniki[idx]
+        g = w.get("gospodarz", "")
+        a = w.get("goscie", "")
+        if not g or not a:
+            continue
+        try:
+            forma = pobierz_forme_meczu(g, a)
+            fh = forma.get("home", {})
+            fa_d = forma.get("away", {})
+
+            if fh.get("form"):
+                gs = fh.get("goals_scored", 0)
+                gc = fh.get("goals_conceded", 0)
+                wyniki[idx]["sofa_forma_g"] = f"{''.join(fh['form'])}({gs}:{gc})"
+            if fa_d.get("form"):
+                gs = fa_d.get("goals_scored", 0)
+                gc = fa_d.get("goals_conceded", 0)
+                wyniki[idx]["sofa_forma_a"] = f"{''.join(fa_d['form'])}({gs}:{gc})"
+
+            inj_g = [i["name"] for i in fh.get("injuries", [])[:3]]
+            inj_a = [i["name"] for i in fa_d.get("injuries", [])[:3]]
+            if inj_g:
+                wyniki[idx]["sofa_kontuzje_g"] = ", ".join(inj_g)
+            if inj_a:
+                wyniki[idx]["sofa_kontuzje_a"] = ", ".join(inj_a)
+        except Exception:
+            pass  # Nie blokuj AI gdy SofaScore nie odpowiada
+
+
+def _sygnaly_summary(wyniki: list) -> str:
+    """
+    Etap 3: Buduje dynamiczne podsumowanie sygnałów dla Groq.
+    Zwraca kilka linii kontekstu — co jest mocne, czego unikać w AKO.
+    """
+    n_pois = sum(1 for w in wyniki if w.get("metoda") == "POISSON")
+    mocne: list[str] = []
+    uwagi: list[str] = []
+
+    _STRONG = {"HIGH_STAKES_TOP", "FINAL_TOP", "HIGH_STAKES_BOTTOM", "FINAL_RELEGATION"}
+
+    for w in wyniki[:20]:
+        g = w.get("gospodarz", "?")[:8]
+        a = w.get("goscie", "?")[:8]
+        pred = w.get("pred") or {}
+
+        if w.get("metoda") != "POISSON":
+            continue
+
+        h2h_g      = pred.get("h2h_g",      {}) or {}
+        heur_g     = pred.get("heur_g",     {}) or {}
+        heur_a     = pred.get("heur_a",     {}) or {}
+        fortress_g = pred.get("fortress_g", {}) or {}
+        imp_g      = pred.get("imp_g",      {}) or {}
+        cross      = (w.get("bzz_info") or {}).get("cross") or {}
+
+        plus, minus = [], []
+        if h2h_g.get("patent"):          plus.append("PATENT")
+        if fortress_g.get("fortress"):   plus.append("TWIERDZA")
+        if imp_g.get("status") in _STRONG: plus.append(imp_g["status"].replace("HIGH_STAKES_", ""))
+
+        if heur_g.get("rotacja") or heur_a.get("rotacja"): minus.append("ROTACJA")
+        if heur_g.get("zmeczenie") or heur_a.get("zmeczenie"): minus.append("ZMĘCZENIE")
+        if cross.get("alert"): minus.append("ROZBIEŻNOŚĆ")
+
+        label = f"{g}-{a}"
+        if len(plus) >= 2:
+            mocne.append(f"{label}({'+'.join(plus)})")
+        if minus:
+            uwagi.append(f"{label}({','.join(minus)})")
+
+    linie = [f"PODZIAŁ: {n_pois} Poisson / {len(wyniki) - n_pois} ML"]
+    if mocne:
+        linie.append(f"MOCNE SYGNAŁY: {' | '.join(mocne[:5])}")
+    if uwagi:
+        linie.append(f"UNIKAJ W AKO:  {' | '.join(uwagi[:5])}")
+
+    sofa_n = sum(1 for w in wyniki if w.get("sofa_forma_g"))
+    if sofa_n:
+        linie.append(f"FORMA SOFA: pobrana dla {sofa_n} meczów (patrz FORMA_SOFA i KONTUZJE w danych)")
+
+    return "\n".join(linie)
+
+
+def _auto_zapisz_backtest(dane: dict, wyniki: list) -> None:
+    """
+    Zapisuje typy AI (top3 + kupony) do bazy backtest po każdej analizie.
+    Bezpieczna — wyjątek nie blokuje głównej ścieżki.
+    """
+    try:
+        from footstats.core.backtest import save_prediction
+    except ImportError:
+        return
+
+    today = datetime.now().strftime("%Y-%m-%d")
+
+    def _znajdz_mecz(mecz_str: str) -> dict:
+        """Dopasowuje 'Bayern vs Dortmund' do wpisu w wyniki po nazwie drużyny."""
+        ms = mecz_str.lower()
+        for w in wyniki:
+            g = w.get("gospodarz", "").lower()
+            a = w.get("goscie", "").lower()
+            if g and g in ms:
+                return w
+            if a and a in ms:
+                return w
+        return {}
+
+    _TYP_NORM = {"Over": "Over 2.5", "Under": "Under 2.5",
+                 "OVER": "Over 2.5", "UNDER": "Under 2.5"}
+
+    def _zapisz(typy: list, kupon_type: str) -> None:
+        for t in typy:
+            mecz_str = t.get("mecz", "")
+            w = _znajdz_mecz(mecz_str)
+            czesci = mecz_str.split(" vs ", 1)
+            home = w.get("gospodarz") or (czesci[0].strip() if czesci else mecz_str)
+            away = w.get("goscie") or (czesci[1].strip() if len(czesci) > 1 else "")
+            ev = t.get("ev_netto")
+            conf = min(95, max(50, int(60 + float(ev) * 2))) if ev is not None else 65
+            tip = _TYP_NORM.get(t.get("typ", ""), t.get("typ", ""))
+            # Etap 7: czynniki do RAG
+            try:
+                from footstats.ai.rag import wyciagnij_faktory
+                faktory = wyciagnij_faktory(w.get("pred") or {})
+            except Exception:
+                faktory = []
+            try:
+                save_prediction(
+                    match_date=w.get("data", today),
+                    team_home=home,
+                    team_away=away,
+                    ai_tip=tip,
+                    ai_confidence=conf,
+                    league=w.get("liga", ""),
+                    odds=t.get("kurs"),
+                    kupon_type=kupon_type,
+                    prompt_version="v5_json",
+                    factors=faktory,
+                )
+            except Exception:
+                pass
+
+    if dane.get("top3"):
+        _zapisz(dane["top3"], "top3")
+    if (dane.get("kupon_a") or {}).get("zdarzenia"):
+        _zapisz(dane["kupon_a"]["zdarzenia"], "kupon_a")
+    if (dane.get("kupon_b") or {}).get("zdarzenia"):
+        _zapisz(dane["kupon_b"]["zdarzenia"], "kupon_b")
+
+
+def ai_analiza_pewniaczki(wyniki: list, pobierz_forme: bool = True) -> dict:
+    """
+    Groq analizuje listę pewniaczków (quick_picks lub weekly_picks).
+
+    Wejście: lista z szybkie_pewniaczki_2dni() lub pewniaczki_tygodnia()
+    pobierz_forme: czy próbować pobrać formę z SofaScore dla TOP 5 meczów
+    Wyjście: słownik JSON z kluczami top3, kupon_a, kupon_b, ostrzezenia.
+      Jeśli parsowanie JSON się nie powiodło, zawiera klucz _raw z surowym tekstem.
     """
     if not wyniki:
-        return "Brak pewniaczków do analizy."
+        return {"_raw": "Brak pewniaczków do analizy."}
 
-    # Zbuduj kompaktowy opis każdego meczu
-    mecze_opisy = []
-    for w in wyniki[:20]:
-        g    = w.get("gospodarz", "?")
-        a    = w.get("goscie", "?")
-        liga = w.get("liga", "?")
-        pw, pr, pp = w.get("pw", 0), w.get("pr", 0), w.get("pp", 0)
-        bt, o25    = w.get("bt", 0), w.get("o25", 0)
-        data  = w.get("data", "")
-        godz  = w.get("godzina", "")
+    # Etap 4: Wzbogać TOP 5 meczów o formę SofaScore (modyfikuje wyniki in-place)
+    if pobierz_forme:
+        _wzbogac_forme(wyniki, top_n=5)
 
-        # Typy z EV
-        scout = w.get("scout", {})
-        oceny = {o["typ"]: o for o in scout.get("oceny", [])}
-        typy_str = []
-        for typ_opis, szansa in w.get("typy", []):
-            oc = oceny.get(typ_opis, {})
-            ev = oc.get("ev")
-            kurs = oc.get("kurs", "–")
-            ev_txt = f"EV={ev*100:+.0f}%" if ev is not None else ""
-            typy_str.append(f"{typ_opis} ({szansa:.0f}% kurs={kurs} {ev_txt})")
+    # Etap 3: Dynamiczne podsumowanie sygnałów
+    sygnaly = _sygnaly_summary(wyniki)
 
-        odds = w.get("odds") or {}
-        k1 = odds.get("home", "–")
-        kx = odds.get("draw", "–")
-        k2 = odds.get("away", "–")
+    # Etap 6: Kalibracja historyczna z backtest DB
+    kalibracja_str = ""
+    try:
+        from footstats.core.backtest import pobierz_kalibracje_backtest
+        k = pobierz_kalibracje_backtest()
+        if k:
+            kalibracja_str = f"KALIBRACJA HISTORYCZNA (backtest ~90 dni):\n{k}\n"
+    except Exception:
+        pass
 
-        mecze_opisy.append(
-            f"• [{data} {godz}] {g} vs {a} [{liga}]\n"
-            f"  ML: 1={pw:.0f}% X={pr:.0f}% 2={pp:.0f}% BTTS={bt:.0f}% O2.5={o25:.0f}%\n"
-            f"  Kursy: 1={k1} X={kx} 2={k2}\n"
-            f"  Typy: {' | '.join(typy_str)}"
-        )
+    mecze_opisy = [_buduj_opis_meczu(w) for w in wyniki[:20]]
 
-    prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami ML (CatBoost Bzzoiro) na najbliższe 48h.
+    prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami na najbliższe 48h.
+Mecze [metoda:POISSON] mają pełną analizę czynnikową. Mecze [metoda:ML] to samo Bzzoiro bez historii.
 
+KONTEKST ZBIORU:
+{sygnaly}
+{kalibracja_str}
 PODATEK: 12% zryczałtowany. Wzór netto: stawka × kurs_łączny × 0.88
-CELE KUPONÓW: 5 PLN stawka → KUPON A: cel ~50 PLN netto (kurs_łączny ≈ 11.4) | KUPON B: cel ~100 PLN netto (kurs_łączny ≈ 22.7)
+EV(brutto) w danych jest PRZED podatkiem — po podatku realny zysk jest o ~12% niższy.
+CELE: 5 PLN stawka → KUPON A: ~50 PLN netto (kurs ≈ 11.4) | KUPON B: ~100 PLN netto (kurs ≈ 22.7)
 
 MECZE:
 {chr(10).join(mecze_opisy)}
 
-ZADANIE (odpowiedz po polsku, konkretnie):
+ZADANIE: Odpowiedz TYLKO w JSON (bez tekstu przed/po):
+{{
+  "top3": [
+    {{
+      "mecz": "Gospodarz vs Goscie",
+      "typ": "1",
+      "kurs": 1.48,
+      "ev_netto": 6.8,
+      "uzasadnienie": "1 zdanie po polsku"
+    }}
+  ],
+  "kupon_a": {{
+    "zdarzenia": [
+      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "1", "kurs": 1.55}}
+    ],
+    "kurs_laczny": 11.4,
+    "wygrana_netto": 49.9
+  }},
+  "kupon_b": {{
+    "zdarzenia": [
+      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "Over", "kurs": 1.75}}
+    ],
+    "kurs_laczny": 22.7,
+    "wygrana_netto": 99.9
+  }},
+  "ostrzezenia": "2-3 zdania o ryzykach"
+}}
 
-1. TOP 3 POJEDYNCZE TYPY – wybierz 3 typy z najwyższym EV i pewnością ML. Dla każdego: mecz, typ, kurs, uzasadnienie (1 zdanie).
+WYTYCZNE:
+- TOP 3: najwyższy EV_netto po podatku (P×kurs×0.88−1). Preferuj POISSON z 2+ czynnikami. Uwzględnij KONTUZJE i FORMA_SOFA.
+- KUPON A: 4-5 zdarzeń z różnych meczów, kurs łączny ~11-12. Omijaj UNIKAJ W AKO. Min. kurs zdarzenia 1.35.
+- KUPON B: 5-6 zdarzeń, kurs łączny ~22-24. Zdarzenia bez korelacji lig."""
 
-2. KUPON A (~50 PLN netto, stawka 5 PLN):
-   - Wybierz 4-5 zdarzeń (różne mecze!) z łącznym kursem ~11-12
-   - Format: NR. Mecz | typ | kurs | pewność ML
-   - Kurs łączny i oczekiwana wygrana netto
-   - Uzasadnienie (2-3 zdania)
-
-3. KUPON B (~100 PLN netto, stawka 5 PLN):
-   - Wybierz 5-6 zdarzeń z łącznym kursem ~22-24
-   - Format: NR. Mecz | typ | kurs | pewność ML
-   - Kurs łączny i oczekiwana wygrana netto
-   - Uzasadnienie (2-3 zdania)
-
-4. RYZYKA – wymień 2-3 główne ryzyka dla tych kuponów.
-
-WAŻNE: Nie bierz kursów poniżej 1.30 do kuponów AKO (ryzyko nieadekwatne do wartości). Preferuj typy z EV>0."""
-
-    return _zapytaj_typera(prompt, max_tokens=1000)
+    tekst = _zapytaj_typera(prompt, max_tokens=1400)
+    dane = _wyciagnij_json(tekst)
+    if "top3" not in dane:
+        dane["_raw"] = tekst
+    else:
+        # Etap 6: Zapisz typy AI do backtestera
+        _auto_zapisz_backtest(dane, wyniki)
+    return dane
 
 
 def ai_sprawdz_kupon(picks_text: str, stawka: float = 5.0, wzorzec_ml: list = None) -> str:

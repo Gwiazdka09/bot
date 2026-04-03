@@ -66,7 +66,8 @@ def init_db() -> None:
                 tip_correct          INTEGER CHECK(tip_correct IN (0, 1, NULL)),
                 kupon_type           TEXT    DEFAULT '',
                 kodeks_rules_checked TEXT    NOT NULL DEFAULT '[]',
-                prompt_version       TEXT    NOT NULL DEFAULT ''
+                prompt_version       TEXT    NOT NULL DEFAULT '',
+                factors              TEXT    NOT NULL DEFAULT '[]'
             );
 
             CREATE INDEX IF NOT EXISTS idx_match_date   ON predictions(match_date);
@@ -74,6 +75,11 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_kupon_type   ON predictions(kupon_type);
             CREATE INDEX IF NOT EXISTS idx_league       ON predictions(league);
         """)
+        # Migration: factors column dla istniejących DB
+        try:
+            conn.execute("ALTER TABLE predictions ADD COLUMN factors TEXT NOT NULL DEFAULT '[]'")
+        except sqlite3.OperationalError:
+            pass  # kolumna już istnieje
 
 
 # ── Logika tip_correct ────────────────────────────────────────────────────
@@ -176,12 +182,14 @@ def save_prediction(
     kupon_type:           str  = "",
     kodeks_rules_checked: list = None,
     prompt_version:       str  = "",
+    factors:              list = None,
 ) -> int:
     """
     Zapisuje typ AI przed meczem. Zwraca id nowo utworzonego rekordu.
     """
     init_db()
-    rules_json = json.dumps(kodeks_rules_checked or [], ensure_ascii=False)
+    rules_json   = json.dumps(kodeks_rules_checked or [], ensure_ascii=False)
+    factors_json = json.dumps(factors or [], ensure_ascii=False)
 
     with _connect() as conn:
         cur = conn.execute(
@@ -189,12 +197,12 @@ def save_prediction(
             INSERT INTO predictions
                 (match_date, team_home, team_away, league,
                  ai_tip, ai_confidence, ai_reasoning, odds,
-                 kupon_type, kodeks_rules_checked, prompt_version)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 kupon_type, kodeks_rules_checked, prompt_version, factors)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (match_date, team_home, team_away, league,
              ai_tip, ai_confidence, ai_reasoning, odds,
-             kupon_type, rules_json, prompt_version),
+             kupon_type, rules_json, prompt_version, factors_json),
         )
         return cur.lastrowid
 
@@ -414,6 +422,43 @@ def get_weakness_report(min_samples: int = 3, days: int = 90) -> dict:
         "odds_bands":     sorted(odds_bands, key=lambda x: x["name"]),
         "days_analyzed":  days,
     }
+
+
+# ── 6. pobierz_kalibracje_backtest ───────────────────────────────────────
+
+def pobierz_kalibracje_backtest(dni: int = 90, min_n: int = 5) -> str:
+    """
+    Zwraca sformatowany string kalibracji do wstrzyknięcia w prompt Groq.
+    Przykład: "Over acc=73%(n=150) | 1 acc=58%(n=80) | BTTS acc=65%(n=40) | ROI=+4.2%"
+    Zwraca pusty string jeśli brak danych lub za mało próbek.
+    """
+    try:
+        stats = get_stats(days=dni)
+    except Exception:
+        return ""
+
+    by_market = stats.get("by_market", {})
+    ORDER = ["1", "X", "2", "1X", "X2", "12",
+             "Over", "OVER 2.5", "Over 2.5", "Under", "UNDER 2.5", "Under 2.5",
+             "BTTS", "BTTS NO"]
+
+    rynki = sorted(
+        [(k, v) for k, v in by_market.items() if v["total"] >= min_n],
+        key=lambda x: ORDER.index(x[0]) if x[0] in ORDER else len(ORDER),
+    )
+    if not rynki:
+        return ""
+
+    czesci = [
+        f"{rynek} acc={v['accuracy_pct']:.0f}%(n={v['total']})"
+        for rynek, v in rynki
+        if v["accuracy_pct"] is not None
+    ]
+    roi = stats.get("roi_pct")
+    if roi is not None:
+        czesci.append(f"ROI={roi:+.1f}%")
+
+    return " | ".join(czesci)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────
