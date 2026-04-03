@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "footstats"
-version = "2.7"
+version = "3.0"
 description = "Football statistics and prediction engine (Poisson + ML)"
 requires-python = ">=3.11"
 dependencies = [
