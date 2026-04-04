@@ -104,6 +104,15 @@ ROTACJA W AKO:
 HISTORIA RAG:
   Bayern vs Dortmund | PATENT+TWIERDZA | HISTORIA: PATENT+TWIERDZA->1: 7/8(87%)
   Historycznie ten wzorzec trafia 87% – mocny dowod na "1".
+
+== ZAKAZY BEZWZGLEDNE (nauczone na stratach 04.04.2026) ==
+1. Max 6 nog w AKO – bez wyjatkow. Wiecej nog = iluzja pewnosci, nie wieksza szansa.
+2. Grupy spadkowe i relegacyjne: Over 2.5 ZABRONIONE.
+   Druzyny walczace o przezycie graja defensywnie i chaotycznie. Lambda z sezonu ich nie opisuje.
+3. Duplikacja selekcji miedzy kuponami: max 1 wspolna selekacja.
+   Jezeli ta sama noga pada, tracisz podwojnie. To nie dywersyfikacja – to multiplikacja bledu.
+4. BetBuilder WSTRZYMANY – Over+BTTS z jednego meczu sa korelowane, brak modulu wyliczenia.
+5. "Kupon 19 pewniaczkow": NIE BUDUJ. Kazda noga ponizej 1.20 to NIGDY. 19 nog to 19 szans na blad.
 """
 
 
@@ -865,7 +874,14 @@ ZADANIE: Odpowiedz TYLKO w JSON (bez tekstu przed/po):
 WYTYCZNE:
 - TOP 3: najwyższy EV_netto po podatku (P×kurs×0.88−1). Preferuj POISSON z 2+ czynnikami. Uwzględnij KONTUZJE i FORMA_SOFA.
 - KUPON A: 4-5 zdarzeń z różnych meczów, kurs łączny ~11-12. Omijaj UNIKAJ W AKO. Min. kurs zdarzenia 1.35.
-- KUPON B: 5-6 zdarzeń, kurs łączny ~22-24. Zdarzenia bez korelacji lig."""
+- KUPON B: 5-6 zdarzeń, kurs łączny ~22-24. Zdarzenia bez korelacji lig.
+
+ZAKAZY BEZWZGLEDNE (każde naruszenie = usuń zdarzenie z propozycji):
+- Kurs < 1.20: NIGDY. Nie proponuj żadnego zdarzenia poniżej 1.20.
+- Max 6 nóg w AKO – nawet jeśli wszystkie wyglądają pewnie.
+- Grupy spadkowe/relegacyjne + Over 2.5: ZABRONIONE. Drużyny walczące o przeżycie grają defensywnie.
+- BetBuilder (Over+BTTS z jednego meczu): ZABRONIONE – brak modułu korelacji.
+- Maksymalnie 2 mecze z tej samej ligi w jednym kuponie."""
 
     tekst = _zapytaj_typera(prompt, max_tokens=1400)
     dane = _wyciagnij_json(tekst)
@@ -914,7 +930,15 @@ PODATEK: 12% zryczałtowany. Wzór netto: {stawka} × kurs_łączny × 0.88
 
 OCENA (odpowiedz po polsku):
 
-1. KAŻDE ZDARZENIE:
+0. WALIDACJA ZASAD (sprawdź PRZED oceną – każde naruszenie to BLOKADA):
+   - Liczba nóg: czy <= 6? Jeśli więcej – ODRZUĆ, napisz które usunąć.
+   - Kursy < 1.20: czy są? Jeśli tak – ODRZUĆ te nogi (zasada NIGDY).
+   - BetBuilder (kombinacje z jednego meczu): czy jest? Jeśli tak – ODRZUĆ, brak modułu korelacji.
+   - Grupy spadkowe / relegacyjne + Over 2.5: czy jest? Jeśli tak – ODRZUĆ (mecze defensywne).
+   - Duplikacja selekcji: zaznacz jeśli ta sama noga była już na innym kuponie tego dnia.
+   Podsumuj: "Zasady OK" lub wymień każde naruszenie z nazwą meczu.
+
+1. KAŻDE ZDARZENIE (tylko te które przeszły walidację):
    - Typ i kurs
    - Ocena kursu vs prawdopodobieństwo ML (jeśli dostępne): EV+/EV-/brak danych
    - Ryzyko: NISKIE / ŚREDNIE / WYSOKIE
