@@ -116,26 +116,77 @@ HISTORIA RAG:
 """
 
 
+def _get_kalibracja_blok() -> str:
+    """Wczytuje kalibrację z treningu historycznego (trainer.py). Cicha na błędy."""
+    try:
+        from footstats.ai.trainer import get_kalibracja_inject
+        return get_kalibracja_inject()
+    except Exception:
+        return ""
+
+
+def _get_liga_statystyki_blok() -> str:
+    """
+    Buduje blok LIGA_STATYSTYKI z danych historycznych (pattern_analyzer).
+    Informuje Groq które ligi mają statystyczne uzasadnienie dla typów Over/BTTS.
+    Preferuj mecze z tych lig gdy budujesz kupon.
+    """
+    try:
+        from footstats.ai.trainer import load_lessons
+        lessons  = load_lessons()
+        rbl      = lessons.get("pattern_summary", {}).get("results_by_league", {})
+        if not rbl:
+            return ""
+        linie = ["== LIGA_STATYSTYKI (dane historyczne, preferuj te ligi) =="]
+        for liga, s in sorted(rbl.items()):
+            over  = s.get("over25_pct")
+            btts  = s.get("btts_pct")
+            avg   = s.get("avg_goals")
+            hw    = s.get("home_win")
+            n     = s.get("n", 0)
+            if n < 100:
+                continue
+            linia = f"{liga}: HW={hw}% Over2.5={over}% BTTS={btts}% Avg={avg}G (n={n})"
+            # Oznacz ligi z wyraźnymi marchewkami
+            if over and over > 58:
+                linia += " <- MARCHEWKA Over2.5"
+            if hw and hw > 47:
+                linia += " <- silna przewaga domu"
+            linie.append(linia)
+        linie.append("Priorytet kuponu: mecze z lig oznaczonych MARCHEWKA > pozostale.")
+        return "\n".join(linie)
+    except Exception:
+        return ""
+
+
 def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
-    """Groq z systemowym promptem wyspecjalizowanego typerа."""
+    """Groq z systemowym promptem wyspecjalizowanego typera + kalibracja + liga statystyki."""
     klucz = os.getenv("GROQ_API_KEY", "").strip()
     if not klucz:
         raise RuntimeError("Brak GROQ_API_KEY w .env")
+
+    kal_blok   = _get_kalibracja_blok()
+    liga_blok  = _get_liga_statystyki_blok()
+    system     = _SYSTEM_TYPER
+    if kal_blok:
+        system += f"\n\n== KALIBRACJA Z DANYCH HISTORYCZNYCH ==\n{kal_blok}\n"
+    if liga_blok:
+        system += f"\n\n{liga_blok}\n"
+
     try:
         import groq as groq_lib
         client = groq_lib.Groq(api_key=klucz)
         resp = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": _SYSTEM_TYPER},
+                {"role": "system", "content": system},
                 {"role": "user",   "content": prompt},
             ],
             max_tokens=max_tokens,
             temperature=0.25,
         )
         return resp.choices[0].message.content
-    except Exception as e:
-        # Fallback na standardowego zapytaj_ai
+    except Exception:
         return zapytaj_ai(prompt, max_tokens)
 
 
@@ -830,7 +881,7 @@ def ai_analiza_pewniaczki(wyniki: list, pobierz_forme: bool = True) -> dict:
 
     mecze_opisy = [_buduj_opis_meczu(w) for w in wyniki[:20]]
 
-    prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami na najbliższe 48h.
+    prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami na najbliższe 72h.
 Mecze [metoda:POISSON] mają pełną analizę czynnikową. Mecze [metoda:ML] to samo Bzzoiro bez historii.
 
 KONTEKST ZBIORU:
@@ -838,7 +889,24 @@ KONTEKST ZBIORU:
 {kalibracja_str}
 PODATEK: 12% zryczałtowany. Wzór netto: stawka × kurs_łączny × 0.88
 EV(brutto) w danych jest PRZED podatkiem — po podatku realny zysk jest o ~12% niższy.
-CELE: 5 PLN stawka → KUPON A: ~50 PLN netto (kurs ≈ 11.4) | KUPON B: ~100 PLN netto (kurs ≈ 22.7)
+
+== FILOZOFIA KUPONÓW — ZASADA 40% ==
+Oba kupony muszą mieć szansa_wygranej_pct >= 40%.
+Liczba nóg: 2-6, ale TYLKO tyle ile pozwala utrzymać >=40% szansy.
+Matematyka: szansa_kuponu = p1 × p2 × ... × pN (iloczyn pewności każdej nogi).
+
+Progi pewności minimalnej per noga (żeby utrzymać 40% przy N nogach):
+  2 nogi: każda noga >= 63%
+  3 nogi: każda noga >= 74%
+  4 nogi: każda noga >= 80%
+  5 nogi: każda noga >= 83%
+  6 nogi: każda noga >= 86%
+
+ZASADA: dodaj nogę TYLKO jeśli jej pewność jest wystarczająco wysoka żeby produkt >= 40%.
+Zacznij od najsilniejszych typów i dodawaj kolejne tylko gdy spełniają próg.
+Jeśli nie ma 6 typów z >=86% — zrób mniej nóg.
+KUPON A: zbuduj z 2-6 nóg z max pewnością, kurs łączny dobierz naturalnie.
+KUPON B: alternatywna kombinacja, inne mecze lub inne rynki, też >=40% szansy.
 
 MECZE:
 {chr(10).join(mecze_opisy)}
@@ -850,47 +918,83 @@ ZADANIE: Odpowiedz TYLKO w JSON (bez tekstu przed/po):
       "mecz": "Gospodarz vs Goscie",
       "typ": "1",
       "kurs": 1.48,
+      "pewnosc_pct": 72,
       "ev_netto": 6.8,
       "uzasadnienie": "1 zdanie po polsku"
     }}
   ],
   "kupon_a": {{
     "zdarzenia": [
-      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "1", "kurs": 1.55}}
+      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "1", "kurs": 1.55, "pewnosc_pct": 74}}
     ],
-    "kurs_laczny": 11.4,
-    "wygrana_netto": 49.9
+    "kurs_laczny": 3.8,
+    "szansa_wygranej_pct": 48,
+    "wygrana_netto": 33.4
   }},
   "kupon_b": {{
     "zdarzenia": [
-      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "Over", "kurs": 1.75}}
+      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "Over", "kurs": 1.75, "pewnosc_pct": 68}}
     ],
-    "kurs_laczny": 22.7,
-    "wygrana_netto": 99.9
+    "kurs_laczny": 9.5,
+    "szansa_wygranej_pct": 28,
+    "wygrana_netto": 41.8
   }},
   "ostrzezenia": "2-3 zdania o ryzykach"
 }}
 
-WYTYCZNE:
-- TOP 3: najwyższy EV_netto po podatku (P×kurs×0.88−1). Preferuj POISSON z 2+ czynnikami. Uwzględnij KONTUZJE i FORMA_SOFA.
-- KUPON A: 4-5 zdarzeń z różnych meczów, kurs łączny ~11-12. Omijaj UNIKAJ W AKO. Min. kurs zdarzenia 1.35.
-- KUPON B: 5-6 zdarzeń, kurs łączny ~22-24. Zdarzenia bez korelacji lig.
-
-ZAKAZY BEZWZGLEDNE (każde naruszenie = usuń zdarzenie z propozycji):
-- Kurs < 1.20: NIGDY. Nie proponuj żadnego zdarzenia poniżej 1.20.
-- Max 6 nóg w AKO – nawet jeśli wszystkie wyglądają pewnie.
-- Grupy spadkowe/relegacyjne + Over 2.5: ZABRONIONE. Drużyny walczące o przeżycie grają defensywnie.
-- BetBuilder (Over+BTTS z jednego meczu): ZABRONIONE – brak modułu korelacji.
-- Maksymalnie 2 mecze z tej samej ligi w jednym kuponie."""
+ZAKAZY BEZWZGLEDNE:
+- Kurs zdarzenia < 1.20: NIGDY.
+- Max 4 nogi w AKO — bez wyjątków.
+- Grupy spadkowe/relegacyjne + Over 2.5: ZABRONIONE.
+- BetBuilder (Over+BTTS z jednego meczu): ZABRONIONE.
+- Maks. 2 mecze z tej samej ligi w jednym kuponie.
+- NIE wkładaj meczu do kuponu tylko dlatego że "podnosi kurs" — każda noga musi mieć >60% pewności."""
 
     tekst = _zapytaj_typera(prompt, max_tokens=1400)
     dane = _wyciagnij_json(tekst)
     if "top3" not in dane:
         dane["_raw"] = tekst
     else:
-        # Etap 6: Zapisz typy AI do backtestera
+        _wymusz_40pct(dane)
         _auto_zapisz_backtest(dane, wyniki)
     return dane
+
+
+def _wymusz_40pct(dane: dict, min_szansa: float = 40.0) -> None:
+    """
+    Walidacja po stronie Python: jeśli kupon ma szansa_wygranej_pct < 40,
+    usuwa nogi od najniższej pewności dopóki iloczyn >= 40% lub zostanie 1 noga.
+    Aktualizuje kurs_laczny, szansa_wygranej_pct, wygrana_netto w miejscu.
+    """
+    import math
+
+    for kupon_key in ("kupon_a", "kupon_b"):
+        kupon = dane.get(kupon_key, {})
+        zdarzenia = kupon.get("zdarzenia", [])
+        if not zdarzenia:
+            continue
+
+        def _szansa(legs):
+            probs = [z.get("pewnosc_pct", 50) / 100.0 for z in legs]
+            return math.prod(probs) * 100
+
+        # Przycinaj od najsłabszej nogi dopóki szansa < min_szansa i len > 1
+        while len(zdarzenia) > 1 and _szansa(zdarzenia) < min_szansa:
+            # usuń nogę z najniższą pewnością
+            zdarzenia.sort(key=lambda z: z.get("pewnosc_pct", 50))
+            zdarzenia.pop(0)
+
+        # Przelicz kurs i szansę
+        kurs_l = 1.0
+        for z in zdarzenia:
+            kurs_l *= z.get("kurs", 1.0)
+
+        szansa = _szansa(zdarzenia)
+        kupon["zdarzenia"]           = zdarzenia
+        kupon["kurs_laczny"]         = round(kurs_l, 2)
+        kupon["szansa_wygranej_pct"] = round(szansa, 1)
+        # wygrana_netto liczona ze stawki 10 PLN domyślnie (zaktualizuje się przy wyświetlaniu)
+        kupon["_trimmed"] = True
 
 
 def ai_sprawdz_kupon(picks_text: str, stawka: float = 5.0, wzorzec_ml: list = None) -> str:

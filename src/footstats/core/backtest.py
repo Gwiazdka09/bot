@@ -234,13 +234,51 @@ def update_result(match_id: int, actual_result: str) -> dict:
         )
 
     status = {None: "?? (nie obliczono)", 1: "TRAFIONY ✓", 0: "PUDŁO ✗"}
-    return {
+    info = {
         "id":            match_id,
         "actual_result": actual_result,
         "ai_tip":        row["ai_tip"],
         "tip_correct":   tip_correct,
         "status":        status[tip_correct],
     }
+    _sprawdz_auto_trening()
+    return info
+
+
+# ── Auto-trening ──────────────────────────────────────────────────────────
+
+AUTO_TRENING_CO_N = 20  # co ile nowych wyników odpala trening
+
+def _sprawdz_auto_trening() -> None:
+    """
+    Sprawdza czy liczba ocenionych predykcji jest wielokrotnością AUTO_TRENING_CO_N.
+    Jeśli tak — odpala trainer.py w tle i wysyła Telegram z nową kalibracją.
+    """
+    try:
+        with _connect() as conn:
+            n = conn.execute(
+                "SELECT COUNT(*) FROM predictions WHERE tip_correct IS NOT NULL"
+            ).fetchone()[0]
+
+        if n > 0 and n % AUTO_TRENING_CO_N == 0:
+            import subprocess, sys
+            subprocess.Popen(
+                [sys.executable, "-m", "footstats.ai.trainer"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            print(f"[Backtest] Auto-trening uruchomiony (n={n} wynikow).")
+            try:
+                from footstats.utils.telegram_notify import _send, telegram_dostepny
+                if telegram_dostepny():
+                    _send(
+                        f"FootStats Auto-trening\n"
+                        f"Zapisano {n} wynikow — Groq aktualizuje kalibracje w tle."
+                    )
+            except Exception:
+                pass
+    except Exception:
+        pass
 
 
 # ── 3. get_stats ─────────────────────────────────────────────────────────

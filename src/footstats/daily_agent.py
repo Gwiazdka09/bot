@@ -65,7 +65,8 @@ def _pobierz_kandydatow(dni: int = 2) -> tuple[list, dict]:
     if not ok:
         _blad(f"Bzzoiro: {msg}")
 
-    wyniki = szybkie_pewniaczki_2dni(c, prog=0.55, godziny=dni * 24)
+    from footstats.config import AGENT_KANDYDAT_PROG
+    wyniki = szybkie_pewniaczki_2dni(c, prog=AGENT_KANDYDAT_PROG, godziny=dni * 24)
     console.print(f"[dim]Bzzoiro: {len(wyniki)} kandydatów w oknie {dni*24}h[/dim]")
 
     # Buduj indeks: (norm_gosp, norm_gosc) → dane meczu
@@ -355,26 +356,37 @@ def _wyswietl(dane: dict, stawka_a: float, stawka_b: float):
         _sep(f"{label} — stawka {stawka:.0f} PLN")
         t2 = Table(show_header=True, header_style="bold blue")
         t2.add_column("#", width=2)
-        t2.add_column("Mecz", min_width=32)
+        t2.add_column("Mecz", min_width=30)
         t2.add_column("Typ", width=8)
         t2.add_column("Kurs", width=6)
-        t2.add_column("Źródło", width=10)
+        t2.add_column("Pewnosc", width=8)
+        t2.add_column("Kelly", width=8)
+        t2.add_column("Zrodlo", width=10)
         for z in zdarzenia:
-            zrodlo = "[green]Bzzoiro✓[/green]" if z.get("_verified") else "[dim]Groq[/dim]"
+            zrodlo  = "[green]Bzzoiro[/green]" if z.get("_verified") else "[dim]Groq[/dim]"
+            pct     = z.get("pewnosc_pct")
+            pct_str = f"{pct}%" if pct else "?"
+            kelly   = z.get("kelly_stake")
+            k_str   = f"[cyan]{kelly}PLN[/cyan]" if kelly else "?"
             t2.add_row(
                 str(z.get("nr", "")),
                 z.get("mecz", "?"),
                 z.get("typ", "?"),
                 f"{z.get('kurs', 0):.2f}",
+                pct_str,
+                k_str,
                 zrodlo,
             )
         console.print(t2)
 
-        kurs_l = kupon.get("kurs_laczny", 0) or 0
-        wyg    = stawka * kurs_l * 0.88
+        kurs_l  = kupon.get("kurs_laczny", 0) or 0
+        wyg     = stawka * kurs_l * 0.88
+        szansa  = kupon.get("szansa_wygranej_pct")
+        szansa_str = f"  |  Szansa: [bold {'green' if szansa and szansa >= 40 else 'yellow'}]{szansa}%[/bold {'green' if szansa and szansa >= 40 else 'yellow'}]" if szansa else ""
         console.print(
             f"  Kurs łączny: [bold]{kurs_l:.2f}[/bold]  |  "
             f"Wygrana netto: [bold green]{wyg:.2f} PLN[/bold green]"
+            f"{szansa_str}"
         )
 
     if dane.get("ostrzezenia"):
@@ -384,6 +396,45 @@ def _wyswietl(dane: dict, stawka_a: float, stawka_b: float):
             title="[yellow]Ostrzeżenia[/yellow]",
             border_style="yellow",
         ))
+
+
+# ── Krok 1b: API-Football Ekstraklasa ───────────────────────────────────────
+
+def _pobierz_apifootball_ekstraklasa(dni: int = 3) -> list[dict]:
+    """Dociąga kandydatów z Ekstraklasy przez API-Football (jeśli klucz dostępny)."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    klucz = os.getenv("APISPORTS_KEY", "").strip()
+    if not klucz:
+        return []
+    try:
+        from footstats.scrapers.api_football import APIFootball
+        af = APIFootball(klucz)
+        return af.kandydaci_liga(api_id=106, godziny=dni * 24, prog_pw=0.50)
+    except Exception as e:
+        console.print(f"[dim]API-Football Ekstraklasa: {e}[/dim]")
+        return []
+
+
+# ── Krok 4b: Kelly Criterion ──────────────────────────────────────────────────
+
+def _dodaj_kelly(dane: dict, bankroll: float) -> None:
+    """Dodaje kelly_stake do każdego zdarzenia w kuponach i top3."""
+    try:
+        from footstats.core.kelly import kelly_stake
+    except ImportError:
+        return
+
+    for kupon_key in ("kupon_a", "kupon_b"):
+        for z in dane.get(kupon_key, {}).get("zdarzenia", []):
+            p     = z.get("pewnosc_pct", 50) / 100.0
+            odds  = z.get("kurs", 1.0)
+            z["kelly_stake"] = kelly_stake(p, odds, bankroll)
+
+    for row in dane.get("top3", []):
+        p    = row.get("pewnosc_pct", 50) / 100.0
+        odds = row.get("kurs", 1.0)
+        row["kelly_stake"] = kelly_stake(p, odds, bankroll)
 
 
 # ── Krok 6: Walidacja Groq ────────────────────────────────────────────────────
@@ -408,24 +459,49 @@ def _waliduj_kupon_groq(dane: dict, stawka: float, kupon_key: str = "kupon_a") -
 
 def main():
     parser = argparse.ArgumentParser(description="FootStats Daily Agent")
-    parser.add_argument("--stawka",   type=float, default=5.0,  help="Stawka kupon A (PLN, domyślnie 5)")
-    parser.add_argument("--stawka-b", type=float, default=5.0,  help="Stawka kupon B (PLN, domyślnie 5)")
-    parser.add_argument("--dni",      type=int,   default=2,    help="Horyzont w dniach (domyślnie 2)")
+    parser.add_argument("--stawka",   type=float, default=10.0, help="Stawka kupon A (PLN, domyslnie 10)")
+    parser.add_argument("--stawka-b", type=float, default=5.0,  help="Stawka kupon B (PLN, domyslnie 5)")
+    parser.add_argument("--dni",      type=int,   default=3,    help="Horyzont w dniach (domyslnie 3)")
     parser.add_argument("--tylko-kupon", action="store_true",   help="Pomiń formę SofaScore")
     parser.add_argument("--waliduj",     action="store_true",   help="Uruchom walidację Groq kuponu A")
     args = parser.parse_args()
 
+    from footstats.config import AGENT_BANKROLL
+
     console.print()
     console.print(Panel(
         f"[bold]FootStats Daily Agent[/bold]  |  {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
-        f"Horyzont: {args.dni} dni  |  Stawka A: {args.stawka} PLN  |  Stawka B: {args.stawka_b} PLN",
+        f"Horyzont: {args.dni} dni  |  Stawka A: {args.stawka} PLN  |  Stawka B: {args.stawka_b} PLN  |  Bankroll: {AGENT_BANKROLL} PLN",
         border_style="cyan",
     ))
 
+    # Krok 0: Auto-update wynikow pending meczow
+    _sep("KROK 0 — Auto-update wynikow")
+    try:
+        from footstats.scrapers.results_updater import update_pending
+        stats_upd = update_pending(days_back=3, dry_run=False, verbose=True)
+        if stats_upd["updated"] > 0:
+            console.print(f"[green]Zaktualizowano {stats_upd['updated']} wynikow w backtest.db[/green]")
+    except Exception as e:
+        console.print(f"[dim]Auto-update wynikow: {e}[/dim]")
+
     _sep("KROK 1 — Bzzoiro ML")
     wyniki, indeks = _pobierz_kandydatow(dni=args.dni)
+
+    # Krok 1b: Dociagnij Ekstraklase z API-Football jesli dostepny
+    wyniki_ekstra = _pobierz_apifootball_ekstraklasa(args.dni)
+    if wyniki_ekstra:
+        console.print(f"[dim]API-Football Ekstraklasa: +{len(wyniki_ekstra)} kandydatow[/dim]")
+        wyniki = wyniki + wyniki_ekstra
+        for w in wyniki_ekstra:
+            g = w.get("gospodarz", "")
+            a = w.get("goscie", "")
+            indeks[(_norm(g), _norm(a))] = {
+                "odds": w.get("odds", {}), "gospodarz": g, "goscie": a, "liga": w.get("liga", "")
+            }
+
     if not wyniki:
-        _blad("Bzzoiro nie zwróciło żadnych kandydatów.")
+        _blad("Bzzoiro nie zwrocilo zadnych kandydatow.")
 
     if not args.tylko_kupon:
         _sep("KROK 2 — Forma SofaScore")
@@ -434,8 +510,11 @@ def main():
     _sep("KROK 3 — Groq AI")
     dane = _analizuj_groq(wyniki)
 
-    _sep("KROK 4 — Weryfikacja kursów (anty-halucynacja)")
+    _sep("KROK 4 — Weryfikacja kursow (anty-halucynacja)")
     dane = _weryfikuj_kupony(dane, indeks)
+
+    # Krok 4b: Dodaj Kelly do kazdej nogi
+    _dodaj_kelly(dane, AGENT_BANKROLL)
 
     _wyswietl(dane, args.stawka, args.stawka_b)
 
@@ -446,18 +525,27 @@ def main():
     sciezka_txt = _zapisz_txt(dane, args.stawka, args.stawka_b)
 
     # Powiadomienie Windows
-    kupon_a = dane.get("kupon_a", {})
-    kupon_b = dane.get("kupon_b", {})
+    kupon_a   = dane.get("kupon_a", {})
+    kupon_b   = dane.get("kupon_b", {})
     ile_nog_a = len(kupon_a.get("zdarzenia", []))
     ile_nog_b = len(kupon_b.get("zdarzenia", []))
-    kurs_a = kupon_a.get("kurs_laczny", 0) or 0
-    kurs_b = kupon_b.get("kurs_laczny", 0) or 0
+    kurs_a    = kupon_a.get("kurs_laczny", 0) or 0
+    kurs_b    = kupon_b.get("kurs_laczny", 0) or 0
+    szansa_a  = kupon_a.get("szansa_wygranej_pct", "?")
     notif_tekst = (
-        f"Kupon A: {ile_nog_a} nog @{kurs_a:.2f} | "
-        f"Kupon B: {ile_nog_b} nog @{kurs_b:.2f}\n"
-        f"Plik: {sciezka_txt.name}"
+        f"A: {ile_nog_a}n @{kurs_a:.2f} ({szansa_a}%) | "
+        f"B: {ile_nog_b}n @{kurs_b:.2f}\n{sciezka_txt.name}"
     )
     _powiadomienie_windows("FootStats - gotowy kupon", notif_tekst)
+
+    # Telegram
+    try:
+        from footstats.utils.telegram_notify import send_kupon, telegram_dostepny
+        if telegram_dostepny():
+            ok = send_kupon(dane, stawka_a=args.stawka, stawka_b=args.stawka_b)
+            console.print(f"[dim]Telegram: {'wyslano' if ok else 'blad wysylki'}[/dim]")
+    except Exception as e:
+        console.print(f"[dim]Telegram niedostepny: {e}[/dim]")
 
     console.print()
     console.print("[bold green]Gotowe.[/bold green] Powodzenia!\n")

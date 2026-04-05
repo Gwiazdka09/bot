@@ -282,3 +282,99 @@ class APIFootball:
                 "Pkt":     w["points"],
             })
         return pd.DataFrame(wiersze) if wiersze else None
+
+    def kandydaci_liga(
+        self,
+        api_id: int,
+        godziny: int = 72,
+        prog_pw: float = 0.50,
+    ) -> list[dict]:
+        """
+        Pobiera nadchodzące mecze ligi + predykcje API-Football.
+        Zwraca listę w formacie kompatybilnym z Bzzoiro (pw/pr/pp/o25/bt itd.)
+        gotową do połączenia z wynikami szybkie_pewniaczki_2dni().
+
+        api_id   – id ligi w API-Football (np. 106 = Ekstraklasa)
+        godziny  – ile godzin do przodu (72 = 3 dni)
+        prog_pw  – minimalny prog prawdopodobieństwa (0.50 = 50%)
+        """
+        from datetime import timezone
+        sezon = datetime.now().year if datetime.now().month > 6 else datetime.now().year - 1
+
+        # 1. Pobierz nadchodzące mecze
+        dane = self._get("/fixtures", params={
+            "league": api_id, "season": sezon, "status": "NS", "next": 20
+        })
+        if not dane:
+            return []
+
+        now_utc = datetime.now(timezone.utc)
+        wyniki  = []
+
+        for m in dane.get("response", []):
+            # Filtruj po oknie czasowym
+            date_str = m.get("fixture", {}).get("date", "")
+            if not date_str:
+                continue
+            try:
+                match_dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                diff_h   = (match_dt - now_utc).total_seconds() / 3600
+                if diff_h < 0 or diff_h > godziny:
+                    continue
+            except ValueError:
+                continue
+
+            fix_id   = m.get("fixture", {}).get("id")
+            teams    = m.get("teams", {})
+            gosp     = _s(teams.get("home", {}).get("name", ""))
+            gosc     = _s(teams.get("away", {}).get("name", ""))
+            liga_str = _APISPORTS_LIGI.get(api_id, {}).get("nazwa", str(api_id))
+
+            # 2. Pobierz predykcje dla tego meczu (1 req/mecz)
+            pred_data = self._get("/predictions", params={"fixture": fix_id})
+            pw = pr = pp = o25 = bt = 50.0
+            odds: dict = {}
+
+            if pred_data:
+                pred_list = pred_data.get("response", [])
+                if pred_list:
+                    p = pred_list[0]
+                    pct = p.get("predictions", {}).get("percent", {})
+                    try:
+                        pw  = float((pct.get("home", "50%") or "50%").replace("%", ""))
+                        pr  = float((pct.get("draw", "25%") or "25%").replace("%", ""))
+                        pp  = float((pct.get("away", "25%") or "25%").replace("%", ""))
+                    except (ValueError, TypeError):
+                        pass
+
+                    # Kursy z predykcji API (jeśli dostępne)
+                    comp = p.get("comparison", {})
+                    # Brak kursów w /predictions – zostawiamy puste
+
+            # Filtruj po progu
+            max_p = max(pw, pr, pp) / 100.0
+            if max_p < prog_pw:
+                continue
+
+            wyniki.append({
+                "gospodarz": gosp,
+                "goscie":    gosc,
+                "liga":      liga_str,
+                "data":      date_str[:10],
+                "godzina":   date_str[11:16],
+                "pw":        pw,
+                "pr":        pr,
+                "pp":        pp,
+                "o25":       o25,
+                "bt":        bt,
+                "odds":      odds,
+                "metoda":    "API-Football",
+                "typy": [
+                    ("1", pw / 100),
+                    ("X", pr / 100),
+                    ("2", pp / 100),
+                ],
+            })
+
+        return wyniki
+

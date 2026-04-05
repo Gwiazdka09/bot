@@ -578,9 +578,14 @@ def main():
                 "[bold yellow]🤖 AI Analiza kolejki[/bold yellow]  "
                 "[dim yellow](wszystkie nadchodzące mecze)[/dim yellow]"
             )
+        console.print(
+            "[bold blue]D[/bold blue]  "
+            "[bold blue]Dashboard[/bold blue]  "
+            "[dim blue](Streamlit: ROI, accuracy, bankroll, oczekujace mecze)[/dim blue]"
+        )
         console.print("[bold]0[/bold]  Wyjscie\n")
 
-        choices = ["0","1","2","3","4","5","6","7","9","a","A","k","K","c","C","p","P","i","I","j","J"]
+        choices = ["0","1","2","3","4","5","6","7","9","a","A","k","K","c","C","p","P","i","I","j","J","d","D"]
         wybor = Prompt.ask("[bold yellow]Twoj wybor[/bold yellow]",
                            choices=choices, default="1").lower()
 
@@ -1073,6 +1078,28 @@ def main():
                             encoding="utf-8"
                         )
                         console.print(f"[green]Zapisano: {_plik_ai}[/green]")
+
+        elif wybor == "d":
+            import subprocess, sys as _sys
+            dash_path = Path(__file__).parents[2] / "dashboard.py"
+            if not dash_path.exists():
+                console.print("[red]Nie znaleziono dashboard.py[/red]")
+            else:
+                console.print(
+                    f"[bold blue]Uruchamianie Dashboard...[/bold blue]\n"
+                    f"[dim]streamlit run {dash_path}[/dim]\n"
+                    "[dim](nacisnij Ctrl+C w terminalu aby zatrzymac)[/dim]"
+                )
+                try:
+                    subprocess.Popen(
+                        [_sys.executable, "-m", "streamlit", "run", str(dash_path)],
+                        creationflags=subprocess.CREATE_NEW_CONSOLE if hasattr(subprocess, "CREATE_NEW_CONSOLE") else 0,
+                    )
+                    console.print("[green]Dashboard uruchomiony w nowym oknie (http://localhost:8501)[/green]")
+                except FileNotFoundError:
+                    console.print("[red]Brak streamlit. Zainstaluj: pip install streamlit[/red]")
+                except Exception as _e:
+                    console.print(f"[red]Blad uruchamiania dashboard: {_e}[/red]")
 
         elif wybor == "0":
             console.print(f"\n[bold blue]Do zobaczenia! FootStats {VERSION}[/bold blue]\n")
