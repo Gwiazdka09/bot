@@ -530,63 +530,65 @@ def main():
         klas   = sys_anal["klasyfikator"]
         dw     = sys_anal["dw_sys"]
 
-        console.rule(f"[bold blue]MENU  FootStats {VERSION}[/bold blue]")
-        console.print("[bold]1[/bold]  Tabela ligowa  [dim](Importance 2.0 – tryb finalny)[/dim]")
-        console.print("[bold]2[/bold]  Ostatnie wyniki")
-        console.print("[bold]3[/bold]  Predykcja meczu  [dim](+ H2H/Patent/Fortress/Dom-Wyjazd)[/dim]")
-        console.print("[bold]4[/bold]  Porownanie formy  [dim](H2H 24 mies. + historia)[/dim]")
-        console.print("[bold]5[/bold]  Analiza kolejki  [dim]([LIGA/PUCHAR/REWANZ/FINAL] v2.6)[/dim]")
-        console.print("[bold]6[/bold]  Eksport PDF  [dim](raport z komentarzem)[/dim]")
-        console.print("[bold]7[/bold]  Zmien lige")
-        console.print(
-            "[bold cyan]9[/bold cyan]  "
-            "[bold cyan]✈️  Analiza Dom/Wyjazd[/bold cyan]  "
-            "[dim cyan](dom vs wyjazd statystyki, wykrywanie Podroznikow)[/dim cyan]"
+        # ── Nagłówek ──────────────────────────────────────────────────────
+        console.print()
+        menu_tbl = Table(
+            show_header=False, box=box.SIMPLE_HEAD,
+            border_style="bright_black", padding=(0, 1),
+            min_width=58,
         )
-        console.print(
-            "[bold green]P[/bold green]  "
-            "[bold green]★ Pewniaczki Tygodnia[/bold green]  "
-            "[dim green](ML + Poisson, Scout Bot EV, PDF)[/dim green]"
+        menu_tbl.add_column("klucz", style="bold", width=4, justify="right")
+        menu_tbl.add_column("nazwa", min_width=22)
+        menu_tbl.add_column("opis", style="dim", min_width=28)
+
+        # ── SEKCJA: LIGA ──────────────────────────────────────────────────
+        menu_tbl.add_row("[bright_black]──[/bright_black]", "[bright_black]LIGA[/bright_black]", "")
+        menu_tbl.add_row("1", "Tabela ligowa",     "Importance 2.0, tryb finalny")
+        menu_tbl.add_row("2", "Ostatnie wyniki",   "N ostatnich meczow")
+        menu_tbl.add_row("3", "Predykcja meczu",   "H2H / Patent / Fortress / Dom-Wyjazd")
+        menu_tbl.add_row("4", "Porownanie formy",  "H2H 24 mies. + historia")
+        menu_tbl.add_row("5", "Analiza kolejki",   "LIGA / PUCHAR / REWANZ / FINAL")
+        menu_tbl.add_row("6", "Eksport PDF",       "Raport z komentarzem")
+        menu_tbl.add_row("7", "Zmien lige",        "Przelacz na inna lige / kraj")
+        menu_tbl.add_row("[cyan]9[/cyan]", "[cyan]Dom / Wyjazd[/cyan]", "Statystyki H/A, wykrywanie Podroznikow")
+
+        # ── SEKCJA: AI ────────────────────────────────────────────────────
+        menu_tbl.add_row("", "", "")
+        menu_tbl.add_row("[bright_black]──[/bright_black]", "[bright_black]TYPY AI  (Groq 70B)[/bright_black]", "")
+        menu_tbl.add_row(
+            "[green]P[/green]", "[green]Pewniaczki Tygodnia[/green]",
+            "ML + Poisson, Scout Bot EV, PDF" + (" [dim](Bzzoiro OK)[/dim]" if bzzoiro else " [yellow](bez Bzzoiro)[/yellow]"),
         )
-        console.print(
-            "[bold magenta]A[/bold magenta]  "
-            "[bold magenta]Analiza Kuponu[/bold magenta]  "
-            "[dim magenta](wklej mecze – Scout Bot oceni EV i ryzyko)[/dim magenta]"
-        )
-        if not sources.bzzoiro_ok or not sources.apisports_ok:
-            console.print(
-                "[bold magenta]K[/bold magenta]  "
-                "[dim magenta]Dodaj klucz API  "
-                f"({'Bzzoiro' if not sources.bzzoiro_ok else 'API-Football'})[/dim magenta]"
-            )
+        menu_tbl.add_row("[green]A[/green]", "[green]Analiza Kuponu[/green]",  "Scout Bot oceni EV i ryzyko")
+        if _ai_dostepne:
+            menu_tbl.add_row("[yellow]I[/yellow]", "[yellow]AI Analiza meczu[/yellow]",  "Groq + kursy bukmacherow")
+            menu_tbl.add_row("[yellow]J[/yellow]", "[yellow]AI Analiza kolejki[/yellow]","Wszystkie nadchodzace mecze")
+
+        # ── SEKCJA: NARZEDZIA ─────────────────────────────────────────────
+        menu_tbl.add_row("", "", "")
+        menu_tbl.add_row("[bright_black]──[/bright_black]", "[bright_black]NARZEDZIA[/bright_black]", "")
+        menu_tbl.add_row("[blue]D[/blue]", "[blue]Dashboard[/blue]", "Streamlit: ROI, bankroll, accuracy")
         if sources.apisports_ok:
             bud = af_budget_status()
             kol = "green" if not bud["ostrzezenie"] else ("yellow" if not bud["krytyczny"] else "red")
-            console.print(
-                f"[bold dim]C[/bold dim]  "
-                f"[dim]Cache API-Football  "
-                f"[{kol}]({bud['pozostalo']}/{bud['limit']} req)[/{kol}][/dim]"
+            menu_tbl.add_row(
+                "C", "Cache API-Football",
+                f"[{kol}]{bud['pozostalo']}/{bud['limit']} req[/{kol}] pozostalo",
             )
-        if _ai_dostepne:
-            console.print(
-                "[bold yellow]I[/bold yellow]  "
-                "[bold yellow]🤖 AI Analiza meczu[/bold yellow]  "
-                "[dim yellow](Groq 70B / Ollama + kursy bukmacherów)[/dim yellow]"
-            )
-            console.print(
-                "[bold yellow]J[/bold yellow]  "
-                "[bold yellow]🤖 AI Analiza kolejki[/bold yellow]  "
-                "[dim yellow](wszystkie nadchodzące mecze)[/dim yellow]"
-            )
+        if not sources.bzzoiro_ok or not sources.apisports_ok:
+            brak = "Bzzoiro" if not sources.bzzoiro_ok else "API-Football"
+            menu_tbl.add_row("[magenta]K[/magenta]", "[magenta]Dodaj klucz API[/magenta]", brak)
+
+        menu_tbl.add_row("", "", "")
+        menu_tbl.add_row("[red]0[/red]", "[red]Wyjscie[/red]", "")
+
         console.print(
-            "[bold blue]D[/bold blue]  "
-            "[bold blue]Dashboard[/bold blue]  "
-            "[dim blue](Streamlit: ROI, accuracy, bankroll, oczekujace mecze)[/dim blue]"
+            Panel(menu_tbl, title=f"[bold blue]FootStats {VERSION}[/bold blue]  [dim]{nazwa_ligi}[/dim]",
+                  border_style="blue", padding=(0, 1)),
         )
-        console.print("[bold]0[/bold]  Wyjscie\n")
 
         choices = ["0","1","2","3","4","5","6","7","9","a","A","k","K","c","C","p","P","i","I","j","J","d","D"]
-        wybor = Prompt.ask("[bold yellow]Twoj wybor[/bold yellow]",
+        wybor = Prompt.ask("[bold yellow]>[/bold yellow]",
                            choices=choices, default="1").lower()
 
         if wybor == "1":
