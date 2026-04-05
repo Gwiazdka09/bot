@@ -12,14 +12,19 @@ Użycie:
 
 import argparse
 import os
+import subprocess
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
 console = Console()
+
+LOGS_DIR = Path(__file__).parent.parent.parent / "logs"
+LOGS_DIR.mkdir(exist_ok=True)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -228,6 +233,87 @@ def _weryfikuj_kupony(dane: dict, indeks: dict) -> dict:
     return dane
 
 
+# ── Krok 5a: Zapis do pliku TXT ──────────────────────────────────────────────
+
+def _zapisz_txt(dane: dict, stawka_a: float, stawka_b: float) -> Path:
+    """Zapisuje kupon do F:/bot/logs/kupon_YYYY-MM-DD.txt. Zwraca ścieżkę."""
+    dzis = datetime.now().strftime("%Y-%m-%d")
+    sciezka = LOGS_DIR / f"kupon_{dzis}.txt"
+
+    linie: list[str] = []
+    linie.append(f"FootStats Daily Agent — {datetime.now().strftime('%d.%m.%Y %H:%M')}")
+    linie.append("=" * 60)
+
+    for label, kupon_key, stawka in [
+        ("KUPON A", "kupon_a", stawka_a),
+        ("KUPON B", "kupon_b", stawka_b),
+    ]:
+        kupon     = dane.get(kupon_key, {})
+        zdarzenia = kupon.get("zdarzenia", [])
+        if not zdarzenia:
+            continue
+        linie.append(f"\n{label} — stawka {stawka:.0f} PLN")
+        linie.append("-" * 40)
+        for z in zdarzenia:
+            verified = "✓" if z.get("_verified") else " "
+            linie.append(
+                f"  {z.get('nr', '?')}. [{verified}] {z.get('mecz','?')}  |  "
+                f"{z.get('typ','?')}  @{z.get('kurs', 0):.2f}"
+            )
+        kurs_l = kupon.get("kurs_laczny", 0) or 0
+        wyg    = stawka * kurs_l * 0.88
+        linie.append(f"  Kurs łączny: {kurs_l:.2f}  |  Wygrana netto: {wyg:.2f} PLN")
+
+    top3 = dane.get("top3", [])
+    if top3:
+        linie.append("\nTOP 3 MECZÓW")
+        linie.append("-" * 40)
+        for i, row in enumerate(top3, 1):
+            ev = row.get("ev_netto", 0) or 0
+            linie.append(
+                f"  {i}. {row.get('mecz','?')}  {row.get('typ','?')}  "
+                f"@{row.get('kurs', 0):.2f}  EV={ev:+.1f}%"
+            )
+            uzas = row.get("uzasadnienie", "")
+            if uzas:
+                linie.append(f"     {uzas}")
+
+    if dane.get("ostrzezenia"):
+        linie.append("\nOSTRZEŻENIA")
+        linie.append(str(dane["ostrzezenia"]))
+
+    tekst = "\n".join(linie) + "\n"
+    sciezka.write_text(tekst, encoding="utf-8")
+    console.print(f"[dim]Kupon zapisany: {sciezka}[/dim]")
+    return sciezka
+
+
+# ── Krok 5b: Powiadomienie Windows ───────────────────────────────────────────
+
+def _powiadomienie_windows(tytul: str, tekst: str) -> None:
+    """Wyświetla Windows toast notification przez PowerShell (bez dodatkowych pakietów)."""
+    ps_script = f"""
+Add-Type -AssemblyName System.Windows.Forms
+$n = New-Object System.Windows.Forms.NotifyIcon
+$n.Icon = [System.Drawing.SystemIcons]::Information
+$n.Visible = $true
+$n.BalloonTipTitle = '{tytul.replace("'", "''")}'
+$n.BalloonTipText  = '{tekst.replace("'", "''")}'
+$n.BalloonTipIcon  = 'Info'
+$n.ShowBalloonTip(8000)
+Start-Sleep -Milliseconds 8500
+$n.Dispose()
+"""
+    try:
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", ps_script],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception as e:
+        console.print(f"[dim]Powiadomienie nieudane: {e}[/dim]")
+
+
 # ── Krok 5: Wyświetl wyniki ───────────────────────────────────────────────────
 
 def _wyswietl(dane: dict, stawka_a: float, stawka_b: float):
@@ -355,6 +441,23 @@ def main():
 
     if args.waliduj:
         _waliduj_kupon_groq(dane, args.stawka, "kupon_a")
+
+    # Zapisz do TXT
+    sciezka_txt = _zapisz_txt(dane, args.stawka, args.stawka_b)
+
+    # Powiadomienie Windows
+    kupon_a = dane.get("kupon_a", {})
+    kupon_b = dane.get("kupon_b", {})
+    ile_nog_a = len(kupon_a.get("zdarzenia", []))
+    ile_nog_b = len(kupon_b.get("zdarzenia", []))
+    kurs_a = kupon_a.get("kurs_laczny", 0) or 0
+    kurs_b = kupon_b.get("kurs_laczny", 0) or 0
+    notif_tekst = (
+        f"Kupon A: {ile_nog_a} nog @{kurs_a:.2f} | "
+        f"Kupon B: {ile_nog_b} nog @{kurs_b:.2f}\n"
+        f"Plik: {sciezka_txt.name}"
+    )
+    _powiadomienie_windows("FootStats - gotowy kupon", notif_tekst)
 
     console.print()
     console.print("[bold green]Gotowe.[/bold green] Powodzenia!\n")
