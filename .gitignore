@@ -62,3 +62,9 @@ sts_debug_*.png
 sts_error.png
 superoferta_debug*.png
 superoferta_error.png
+superbet_debug_*.png
+superbet_error.png
+
+# ── Logi i pliki tymczasowe
+logs/
+*.png
