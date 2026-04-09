@@ -7,8 +7,10 @@ Jakub dał pełne uprawnienia do autonomicznego działania. **Nie pytaj o potwie
 - Uruchamianiu skryptów Python, testów (`pytest`), poleceń bash
 - Tworzeniu i modyfikowaniu plików w całym repozytorium
 - `git add`, `git commit`, `git push` — commituj i pushuj bez pytania
-- Code review, spec review, subagent dispatch
+- Code review, spec review, subagent dispatch — uruchamiaj bez pytania
 - Kontynuowaniu tasków z planów bez czekania na potwierdzenie
+- Naprawianiu bugów znalezionych podczas review — napraw i commituj bez pytania
+- Uruchamianiu kolejnych tasków z planu jeden po drugim — nie czekaj na OK między taskami
 
 **Wyjątki (zawsze pytaj):**
 - `pip install` nowej zależności — poinformuj dlaczego potrzebna
