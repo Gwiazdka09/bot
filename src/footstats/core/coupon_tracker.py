@@ -1,0 +1,149 @@
+"""
+coupon_tracker.py – SQLite CRUD dla kuponów FootStats.
+
+Tabela coupons: śledzi kupony od DRAFT do WON/LOST/VOID.
+Migracja: dodaje coupon_id FK do istniejącej tabeli predictions.
+
+Użycie:
+    from footstats.core.coupon_tracker import save_coupon, update_coupon_status
+    cid = save_coupon("draft", "A", legs, total_odds=12.5, stake_pln=10.0)
+    update_coupon_status(cid, "WON", payout_pln=110.0)
+"""
+
+import json
+import sqlite3
+from pathlib import Path
+
+DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
+
+# Statusy kuponu
+STATUS_DRAFT   = "DRAFT"
+STATUS_ACTIVE  = "ACTIVE"
+STATUS_WON     = "WON"
+STATUS_LOST    = "LOST"
+STATUS_PARTIAL = "PARTIAL"
+STATUS_VOID    = "VOID"
+
+ACTIVE_STATUSES = (STATUS_DRAFT, STATUS_ACTIVE)
+
+
+def _connect() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def init_coupon_tables() -> None:
+    """Tworzy tabele coupons i migruje predictions. Bezpieczne wielokrotne wywołanie."""
+    with _connect() as conn:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS coupons (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+                phase            TEXT NOT NULL,
+                status           TEXT NOT NULL DEFAULT 'DRAFT',
+                kupon_type       TEXT NOT NULL,
+                legs_json        TEXT NOT NULL DEFAULT '[]',
+                total_odds       REAL,
+                stake_pln        REAL,
+                payout_pln       REAL,
+                roi_pct          REAL,
+                groq_reasoning   TEXT,
+                decision_score   INTEGER,
+                match_date_first TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_coupon_status  ON coupons(status);
+            CREATE INDEX IF NOT EXISTS idx_coupon_created ON coupons(created_at);
+        """)
+        # Migration: coupon_id do predictions (bezpieczne jeśli już istnieje)
+        try:
+            conn.execute(
+                "ALTER TABLE predictions ADD COLUMN coupon_id INTEGER REFERENCES coupons(id)"
+            )
+        except sqlite3.OperationalError:
+            pass  # kolumna już istnieje
+
+
+def save_coupon(
+    phase: str,
+    kupon_type: str,
+    legs: list[dict],
+    total_odds: float | None = None,
+    stake_pln: float | None = None,
+    groq_reasoning: str = "",
+    decision_score: int | None = None,
+    match_date_first: str | None = None,
+) -> int:
+    """
+    Zapisuje nowy kupon (status=DRAFT). Zwraca id.
+
+    phase:      'draft' | 'final'
+    kupon_type: 'A' | 'B' | 'single'
+    legs:       lista dict z kluczami: gospodarz, goscie, typ, kurs,
+                opcjonalnie: pewnosc, liga, prediction_id
+    """
+    init_coupon_tables()
+    legs_json = json.dumps(legs, ensure_ascii=False)
+    with _connect() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO coupons
+                (phase, status, kupon_type, legs_json, total_odds, stake_pln,
+                 groq_reasoning, decision_score, match_date_first)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (phase, STATUS_DRAFT, kupon_type, legs_json,
+             total_odds, stake_pln, groq_reasoning, decision_score, match_date_first),
+        )
+        return cur.lastrowid
+
+
+def update_coupon_status(
+    coupon_id: int,
+    status: str,
+    payout_pln: float | None = None,
+) -> None:
+    """
+    Aktualizuje status kuponu. Jeśli payout_pln podany — oblicza roi_pct.
+
+    status: 'DRAFT' | 'ACTIVE' | 'WON' | 'LOST' | 'PARTIAL' | 'VOID'
+    """
+    roi_pct = None
+    with _connect() as conn:
+        if payout_pln is not None:
+            row = conn.execute(
+                "SELECT stake_pln FROM coupons WHERE id=?", (coupon_id,)
+            ).fetchone()
+            if row and row["stake_pln"]:
+                roi_pct = round(
+                    (payout_pln - row["stake_pln"]) / row["stake_pln"] * 100, 1
+                )
+        conn.execute(
+            "UPDATE coupons SET status=?, payout_pln=?, roi_pct=? WHERE id=?",
+            (status, payout_pln, roi_pct, coupon_id),
+        )
+
+
+def get_active_coupons() -> list[sqlite3.Row]:
+    """Zwraca kupony ze statusem DRAFT lub ACTIVE, od najnowszych."""
+    init_coupon_tables()
+    with _connect() as conn:
+        return conn.execute(
+            "SELECT * FROM coupons WHERE status IN (?, ?) ORDER BY created_at DESC",
+            ACTIVE_STATUSES,
+        ).fetchall()
+
+
+def get_coupon_legs(coupon_id: int) -> list[dict]:
+    """Zwraca listę nóg kuponu jako list[dict]. Pusty list jeśli kupon nie istnieje."""
+    init_coupon_tables()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT legs_json FROM coupons WHERE id=?", (coupon_id,)
+        ).fetchone()
+        if not row:
+            return []
+        return json.loads(row["legs_json"])
