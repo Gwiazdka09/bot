@@ -30,16 +30,33 @@ VALID_STATUSES = {STATUS_DRAFT, STATUS_ACTIVE, STATUS_WON, STATUS_LOST, STATUS_P
 
 def _connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
+def _exec(fn):
+    """
+    Otwiera połączenie, wykonuje fn(conn), commituje i zamyka.
+    Gwarantuje conn.close() na Windows (WAL nie blokuje pliku po close).
+    """
+    conn = _connect()
+    try:
+        result = fn(conn)
+        conn.commit()
+        return result
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 def init_coupon_tables() -> None:
     """Tworzy tabele coupons i migruje predictions. Bezpieczne wielokrotne wywołanie."""
-    with _connect() as conn:
+    def _fn(conn):
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS coupons (
                 id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -66,6 +83,7 @@ def init_coupon_tables() -> None:
             )
         except sqlite3.OperationalError:
             pass  # kolumna już istnieje
+    _exec(_fn)
 
 
 def save_coupon(
@@ -88,7 +106,8 @@ def save_coupon(
     """
     init_coupon_tables()
     legs_json = json.dumps(legs, ensure_ascii=False)
-    with _connect() as conn:
+
+    def _fn(conn):
         cur = conn.execute(
             """
             INSERT INTO coupons
@@ -100,6 +119,7 @@ def save_coupon(
              total_odds, stake_pln, groq_reasoning, decision_score, match_date_first),
         )
         return cur.lastrowid
+    return _exec(_fn)
 
 
 def update_coupon_status(
@@ -115,8 +135,9 @@ def update_coupon_status(
     init_coupon_tables()
     if status not in VALID_STATUSES:
         raise ValueError(f"Nieprawidłowy status kuponu: {status!r}")
-    roi_pct = None
-    with _connect() as conn:
+
+    def _fn(conn):
+        roi_pct = None
         if payout_pln is not None:
             row = conn.execute(
                 "SELECT stake_pln FROM coupons WHERE id=?", (coupon_id,)
@@ -129,25 +150,30 @@ def update_coupon_status(
             "UPDATE coupons SET status=?, payout_pln=?, roi_pct=? WHERE id=?",
             (status, payout_pln, roi_pct, coupon_id),
         )
+    _exec(_fn)
 
 
 def get_active_coupons() -> list[sqlite3.Row]:
     """Zwraca kupony ze statusem DRAFT lub ACTIVE, od najnowszych."""
     init_coupon_tables()
-    with _connect() as conn:
+
+    def _fn(conn):
         return conn.execute(
             "SELECT * FROM coupons WHERE status IN (?, ?) ORDER BY created_at DESC",
             ACTIVE_STATUSES,
         ).fetchall()
+    return _exec(_fn)
 
 
 def get_coupon_legs(coupon_id: int) -> list[dict]:
     """Zwraca listę nóg kuponu jako list[dict]. Pusty list jeśli kupon nie istnieje."""
     init_coupon_tables()
-    with _connect() as conn:
+
+    def _fn(conn):
         row = conn.execute(
             "SELECT legs_json FROM coupons WHERE id=?", (coupon_id,)
         ).fetchone()
         if not row:
             return []
         return json.loads(row["legs_json"])
+    return _exec(_fn)
