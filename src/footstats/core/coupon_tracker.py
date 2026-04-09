@@ -25,6 +25,7 @@ STATUS_PARTIAL = "PARTIAL"
 STATUS_VOID    = "VOID"
 
 ACTIVE_STATUSES = (STATUS_DRAFT, STATUS_ACTIVE)
+VALID_STATUSES = {STATUS_DRAFT, STATUS_ACTIVE, STATUS_WON, STATUS_LOST, STATUS_PARTIAL, STATUS_VOID}
 
 
 def _connect() -> sqlite3.Connection:
@@ -111,6 +112,9 @@ def update_coupon_status(
 
     status: 'DRAFT' | 'ACTIVE' | 'WON' | 'LOST' | 'PARTIAL' | 'VOID'
     """
+    init_coupon_tables()
+    if status not in VALID_STATUSES:
+        raise ValueError(f"Nieprawidłowy status kuponu: {status!r}")
     roi_pct = None
     with _connect() as conn:
         if payout_pln is not None:

@@ -65,3 +65,9 @@ def test_init_coupon_tables_idempotent():
     """Wielokrotne wywołanie nie exploduje."""
     init_coupon_tables()
     init_coupon_tables()
+
+
+def test_update_coupon_status_invalid_raises():
+    cid = save_coupon("draft", "A", [])
+    with pytest.raises(ValueError, match="Nieprawidłowy"):
+        update_coupon_status(cid, "INVALID_STATUS")
