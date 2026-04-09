@@ -215,8 +215,8 @@ def run_evening_agent(date_str: str | None = None) -> dict:
             if pred_id:
                 try:
                     update_result(pred_id, wynik)
-                except (ValueError, Exception):
-                    pass
+                except (ValueError, KeyError) as e:
+                    console.print(f"[yellow]Warning: Could not update prediction {pred_id}: {e}[/yellow]")
 
         nowy_status = _status_kuponu(nogi_statusy)
 
