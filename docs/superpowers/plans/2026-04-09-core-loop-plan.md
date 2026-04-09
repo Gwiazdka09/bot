@@ -1040,7 +1040,7 @@ git commit -m "feat: evening_agent — weryfikacja wyników kuponów 23:00 (Task
 **Files:**
 - Create: `run_evening_agent.bat`
 
-- [ ] **Step 4.1: Utwórz launcher**
+- [x] **Step 4.1: Utwórz launcher**
 
 Utwórz `run_evening_agent.bat` w katalogu głównym `F:\bot\`:
 
@@ -1051,7 +1051,7 @@ call venv\Scripts\activate.bat 2>nul || call .venv\Scripts\activate.bat 2>nul
 python -m footstats.evening_agent >> logs\evening_agent.log 2>&1
 ```
 
-- [ ] **Step 4.2: Zarejestruj zadanie w Task Scheduler**
+- [x] **Step 4.2: Zarejestruj zadanie w Task Scheduler**
 
 ```powershell
 schtasks /create /tn "FootStats Evening" /tr "F:\bot\run_evening_agent.bat" /sc daily /st 23:00 /f
@@ -1064,7 +1064,7 @@ schtasks /query /tn "FootStats Evening"
 
 Oczekiwany wynik: zadanie widoczne ze statusem `Ready`.
 
-- [ ] **Step 4.3: Test manualny**
+- [x] **Step 4.3: Test manualny**
 
 ```bash
 python -m footstats.evening_agent --date 2026-04-08
@@ -1072,7 +1072,7 @@ python -m footstats.evening_agent --date 2026-04-08
 
 Oczekiwany wynik: Console log z liczbą sprawdzonych kuponów i Rich Table z podsumowaniem. Brak błędów krytycznych.
 
-- [ ] **Step 4.4: Commit**
+- [x] **Step 4.4: Commit**
 
 ```bash
 git add run_evening_agent.bat
