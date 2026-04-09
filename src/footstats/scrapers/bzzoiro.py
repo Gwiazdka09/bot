@@ -85,12 +85,17 @@ class BzzoiroClient:
         return dane.get("results", []) if dane else []
 
     def predykcja_meczu(self, event_id: int) -> dict | None:
-        """Pobiera predykcje ML dla konkretnego meczu."""
-        dane = self._get(f"/predictions/", params={"event": event_id})
-        if not dane:
-            return None
-        wyniki = dane.get("results", [])
-        return wyniki[0] if wyniki else None
+        """
+        Pobiera predykcje ML dla konkretnego meczu.
+
+        DEPRECATED: Funkcja zwracała ten sam wynik dla różnych event_id
+        (bug po stronie API Bzzoiro - cache/server). Używaj predykcje_tygodnia().
+        """
+        raise RuntimeError(
+            "BzzoiroClient.predykcja_meczu() jest DEPRECATED - "
+            "funkcja zwracała ten sam wynik dla różnych event_id (bug API Bzzoiro). "
+            "Używaj predykcje_tygodnia() zamiast tego."
+        )
 
     def predykcje_tygodnia(self, liga_kod: str = None) -> list:
         """

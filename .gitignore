@@ -68,3 +68,4 @@ superbet_error.png
 # ── Logi i pliki tymczasowe
 logs/
 *.png
+.aider*
