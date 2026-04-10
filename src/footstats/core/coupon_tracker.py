@@ -165,6 +165,63 @@ def get_active_coupons() -> list[sqlite3.Row]:
     return _exec(_fn)
 
 
+def get_draft_today() -> "sqlite3.Row | None":
+    """Zwraca dzisiejszy kupon DRAFT (pierwszy znaleziony) lub None."""
+    init_coupon_tables()
+    from datetime import date
+    dzis = date.today().isoformat()
+
+    def _fn(conn):
+        return conn.execute(
+            """
+            SELECT * FROM coupons
+            WHERE status = 'DRAFT'
+              AND date(created_at) = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (dzis,),
+        ).fetchone()
+    return _exec(_fn)
+
+
+def promote_to_active(
+    coupon_id: int,
+    legs: list[dict] | None = None,
+    groq_reasoning: str = "",
+    decision_score: int | None = None,
+    total_odds: float | None = None,
+) -> None:
+    """
+    Promuje kupon DRAFT → ACTIVE (faza final).
+    Opcjonalnie aktualizuje nogi, reasoning i score z analizy finalnej.
+    """
+    init_coupon_tables()
+    legs_json = json.dumps(legs, ensure_ascii=False) if legs is not None else None
+
+    def _fn(conn):
+        if legs_json is not None:
+            conn.execute(
+                """
+                UPDATE coupons
+                SET status        = 'ACTIVE',
+                    phase         = 'final',
+                    legs_json     = ?,
+                    groq_reasoning = ?,
+                    decision_score = COALESCE(?, decision_score),
+                    total_odds    = COALESCE(?, total_odds)
+                WHERE id = ?
+                """,
+                (legs_json, groq_reasoning, decision_score, total_odds, coupon_id),
+            )
+        else:
+            conn.execute(
+                "UPDATE coupons SET status='ACTIVE', phase='final' WHERE id=?",
+                (coupon_id,),
+            )
+    _exec(_fn)
+
+
 def get_coupon_legs(coupon_id: int) -> list[dict]:
     """Zwraca listę nóg kuponu jako list[dict]. Pusty list jeśli kupon nie istnieje."""
     init_coupon_tables()

@@ -55,7 +55,11 @@ Pewnosc modelu <50% (malo danych H2H) – typujemy w ciemno, obnizaj zaufanie.
 1.20-1.35: KOTWICA – tylko gdy pewnosc modelu >= 90% (np. PSG w domu vs slaby rywal,
            Over 1.5 gdy obie druzyny strzelaja regularnie, wynik klasy A vs D).
            EV przy 1.23 i P=93%: 0.93x1.23x0.88-1 = +0.7% – ledwo na plusie, wiec pewnosc musi byc pewna.
-> 1.35  : standard, liczymy EV_netto normalnie.
+1.35-1.80: DOPUSZCZALNE TYLKO w AKO jako noga — NIGDY jako standalone single.
+           Przy stawce 5-10 PLN zysk netto z singla 1.67 to tylko ~2-3 PLN – nieoplacalne.
+           W AKO mnozy kurs laczny — wtedy ma sens.
+> 1.80  : standard dla singla i AKO, liczymy EV_netto normalnie.
+ZASADA SINGLA: single (1 noga) dozwolony tylko gdy kurs >= 1.80 LUB stawka >= 50 PLN.
 
 == BUDOWANIE KUPONU AKO ==
 Cel: wlasciwy kurs laczny, nie liczba zdarzen. Optymalna liczba: 4-6 zdarzen.
