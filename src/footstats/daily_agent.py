@@ -507,6 +507,9 @@ def main():
     if not wyniki:
         _blad("Bzzoiro nie zwrocilo zadnych kandydatow.")
 
+    # Ensemble: oblicz roznica_modeli (Poisson vs Bzzoiro) dla każdego kandydata
+    _oblicz_roznica_modeli(wyniki)
+
     # -- Faza draft/final: decision_score pre-filter + enrichment ──────────────
     if args.faza:
         _sep(f"DECISION SCORE — faza {args.faza.upper()}")
@@ -556,6 +559,9 @@ def main():
         _waliduj_kupon_groq(dane, args.stawka, "kupon_a")
 
     # -- Faza: zapisz kupon do SQLite DB ───────────────────────────────────────
+    cid = None
+    draft_legs = []
+    draft_odds = 1.0
     if args.faza:
         kupon_a_db = dane.get("kupon_a", {})
         zdarzenia_db = kupon_a_db.get("zdarzenia", [])
@@ -570,6 +576,8 @@ def main():
             )
             if cid:
                 console.print(f"[green]✅ Kupon zapisany do DB — ID: {cid} | faza: {args.faza}[/green]")
+                draft_legs = zdarzenia_db
+                draft_odds = kurs_db
 
     # Zapisz do TXT
     sciezka_txt = _zapisz_txt(dane, args.stawka, args.stawka_b)
@@ -588,17 +596,66 @@ def main():
     )
     _powiadomienie_windows("FootStats - gotowy kupon", notif_tekst)
 
-    # Telegram
+    # Telegram — DRAFT: prosty alert z ID; FINAL/brak: pełny kupon
     try:
-        from footstats.utils.telegram_notify import send_kupon, telegram_dostepny
+        from footstats.utils.telegram_notify import (
+            send_kupon, send_draft_kupon, telegram_dostepny,
+        )
         if telegram_dostepny():
-            ok = send_kupon(dane, stawka_a=args.stawka, stawka_b=args.stawka_b)
+            if args.faza == "draft" and cid and draft_legs:
+                ok = send_draft_kupon(cid, draft_legs, draft_odds)
+            else:
+                ok = send_kupon(dane, stawka_a=args.stawka, stawka_b=args.stawka_b)
             console.print(f"[dim]Telegram: {'wyslano' if ok else 'blad wysylki'}[/dim]")
     except Exception as e:
         console.print(f"[dim]Telegram niedostepny: {e}[/dim]")
 
     console.print()
     console.print("[bold green]Gotowe.[/bold green] Powodzenia!\n")
+
+
+# ── Ensemble: roznica_modeli ─────────────────────────────────────────────────
+
+def _oblicz_roznica_modeli(wyniki: list) -> None:
+    """
+    Oblicza roznica_modeli = max(|P_poisson − P_bzzoiro|) dla win/draw/loss.
+
+    Używa wynik_g/wynik_a z Bzzoiro ML jako przybliżonych lambd Poissona
+    (brak potrzeby ładowania bazy historycznej).
+    Ustawia pole 'roznica_modeli' in-place na każdym kandydacie.
+    """
+    try:
+        from scipy.stats import poisson as _sps
+        from footstats.core.ensemble import ensemble_probs, get_roznica
+    except ImportError:
+        return
+
+    for k in wyniki:
+        pw = k.get("pw", 0) / 100.0
+        pr = k.get("pr", 0) / 100.0
+        pp = k.get("pp", 0) / 100.0
+        if pw + pr + pp < 0.01:
+            continue  # brak danych ML Bzzoiro
+
+        p_bzzoiro = {"win": pw, "draw": pr, "loss": pp}
+
+        lh = max(float(k.get("wynik_g", 1) or 1), 0.3)
+        la = max(float(k.get("wynik_a", 1) or 1), 0.3)
+
+        p_win = p_draw = p_loss = 0.0
+        for i in range(8):
+            for j in range(8):
+                p = _sps.pmf(i, lh) * _sps.pmf(j, la)
+                if i > j:
+                    p_win  += p
+                elif i == j:
+                    p_draw += p
+                else:
+                    p_loss += p
+
+        p_poisson = {"win": p_win, "draw": p_draw, "loss": p_loss}
+        p_ens = ensemble_probs(p_poisson, p_bzzoiro)
+        k["roznica_modeli"] = round(get_roznica(p_ens, p_poisson, p_bzzoiro), 3)
 
 
 # ── Nowe: enrichment fazy final ───────────────────────────────────────────

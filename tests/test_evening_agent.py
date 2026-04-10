@@ -152,3 +152,35 @@ def test_run_evening_agent_pending_when_no_result():
     assert summary["active"] == 1
     active = get_active_coupons()
     assert len(active) == 1  # nadal aktywny
+
+
+def test_run_evening_agent_triggers_auto_trainer():
+    """Gdy >= 20 nóg dostaje wyniki → auto-trainer jest uruchamiany."""
+    from footstats.core.coupon_tracker import save_coupon, init_coupon_tables, promote_to_active
+    from footstats.evening_agent import run_evening_agent
+
+    init_coupon_tables()
+
+    # Tworzymy 20 kuponów jednonożnych — każdy z inną drużyną
+    fixtures = []
+    for i in range(20):
+        home = f"HomeTeam{i}"
+        away = f"AwayTeam{i}"
+        legs = [{"home": home, "away": away, "typ": "1"}]
+        cid = save_coupon("draft", "A", legs, stake_pln=10.0, total_odds=1.5)
+        promote_to_active(cid)
+        fixtures.append({
+            "fixture": {"status": {"short": "FT"}},
+            "teams": {"home": {"name": home}, "away": {"name": away}},
+            "goals": {"home": 1, "away": 0},
+        })
+
+    with patch("footstats.evening_agent._fetch_results_today", return_value=fixtures), \
+         patch("footstats.evening_agent._send_telegram_summary"), \
+         patch("subprocess.Popen") as mock_popen, \
+         patch.dict("os.environ", {"APISPORTS_KEY": "test_key"}):
+        run_evening_agent("2026-04-09")
+
+    mock_popen.assert_called_once()
+    call_args = mock_popen.call_args[0][0]
+    assert "footstats.ai.trainer" in call_args

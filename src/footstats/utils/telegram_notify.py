@@ -134,6 +134,35 @@ def send_wynik_update(match_id: int, mecz: str, ai_tip: str,
     return _send(msg)
 
 
+def send_draft_kupon(coupon_id: int, legs: list[dict], total_odds: float) -> bool:
+    """
+    Powiadomienie o zapisie kuponu DRAFT — alert że kandydaci są zaplanowani.
+    Wysyłany po fazie draft, przed finalem.
+    """
+    dzis = datetime.now().strftime("%d.%m.%Y %H:%M")
+    n = len(legs)
+    linie = [
+        f"<b>FootStats DRAFT #{coupon_id} \u2014 {dzis}</b>",
+        f"Nogi: <b>{n}</b> | \u0141\u0105czny kurs: <b>{total_odds:.2f}</b>",
+        "",
+        "<b>Kandydaci:</b>",
+    ]
+    for leg in legs[:6]:
+        home  = leg.get("home") or leg.get("gospodarz", "?")
+        away  = leg.get("away") or leg.get("goscie", "?")
+        tip   = leg.get("tip", "?")
+        odds  = leg.get("odds") or leg.get("kurs", 0.0)
+        score = leg.get("decision_score", 0)
+        linie.append(f"  \u2022 {home} \u2013 {away} <b>{tip}</b> @{float(odds):.2f} [score={score}]")
+    linie.append("\n\u23f3 Status: DRAFT (fina\u0142 ~1h przed meczem)")
+    return _send("\n".join(linie))
+
+
+def send_message(text: str) -> bool:
+    """Wysyła dowolną wiadomość tekstową na Telegram."""
+    return _send(text)
+
+
 def send_trening_raport(n_matches: int, marchewki: list, kije: list) -> bool:
     """Wysyła skrót wyników treningu Groq."""
     linie = [f"<b>FootStats Trening – {datetime.now().strftime('%d.%m')}</b>"]
