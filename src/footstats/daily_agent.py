@@ -128,12 +128,23 @@ def _wzbogac_forme_top(wyniki: list, top_n: int = 6) -> None:
 
 # ── Krok 3: Groq AI ───────────────────────────────────────────────────────────
 
-def _analizuj_groq(wyniki: list) -> dict:
+def _analizuj_groq(
+    wyniki: list,
+    cel_wygrana_a: float | None = None,
+    cel_wygrana_b: float | None = None,
+    stawka: float = 10.0,
+) -> dict:
     from footstats.ai.analyzer import ai_analiza_pewniaczki, ai_groq_dostepny
     if not ai_groq_dostepny():
         _blad("Brak GROQ_API_KEY w .env")
     console.print("[dim]Groq: analizuję i buduję kupony...[/dim]")
-    return ai_analiza_pewniaczki(wyniki, pobierz_forme=False)
+    return ai_analiza_pewniaczki(
+        wyniki,
+        pobierz_forme=False,
+        cel_wygrana_a=cel_wygrana_a,
+        cel_wygrana_b=cel_wygrana_b,
+        stawka=stawka,
+    )
 
 
 # ── Krok 4: Weryfikacja halucynacji ──────────────────────────────────────────
@@ -464,9 +475,11 @@ def main():
     parser.add_argument("--dni",      type=int,   default=3,    help="Horyzont w dniach (domyslnie 3)")
     parser.add_argument("--tylko-kupon", action="store_true",   help="Pomiń formę SofaScore")
     parser.add_argument("--waliduj",     action="store_true",   help="Uruchom walidację Groq kuponu A")
+    parser.add_argument("--cel-a",   type=float, default=None,  help="Cel wygranej netto kupon A (PLN)")
+    parser.add_argument("--cel-b",   type=float, default=None,  help="Cel wygranej netto kupon B (PLN)")
     parser.add_argument(
         "--faza", choices=["draft", "final"], default=None,
-        help="Faza: draft (08:00, bez składów) lub final (1h przed meczem, ze składami)"
+        help="Faza: draft (08:00, bez skladow) lub final (1h przed meczem, ze skladami)"
     )
     args = parser.parse_args()
 
@@ -545,7 +558,7 @@ def main():
         _wzbogac_forme_top(wyniki, top_n=6)
 
     _sep("KROK 3 — Groq AI")
-    dane = _analizuj_groq(wyniki)
+    dane = _analizuj_groq(wyniki, cel_wygrana_a=args.cel_a, cel_wygrana_b=args.cel_b, stawka=args.stawka)
 
     _sep("KROK 4 — Weryfikacja kursow (anty-halucynacja)")
     dane = _weryfikuj_kupony(dane, indeks)

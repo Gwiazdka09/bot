@@ -854,12 +854,68 @@ def _auto_zapisz_backtest(dane: dict, wyniki: list) -> None:
         _zapisz(dane["kupon_b"]["zdarzenia"], "kupon_b")
 
 
-def ai_analiza_pewniaczki(wyniki: list, pobierz_forme: bool = True) -> dict:
+def _buduj_cel_kuponow(cel_a: float | None, cel_b: float | None, stawka: float) -> str:
+    """Generuje sekcję FILOZOFIA KUPONÓW — standardową lub z celem wygranej."""
+    if cel_a is None and cel_b is None:
+        return """Oba kupony muszą mieć szansa_wygranej_pct >= 40%.
+Liczba nóg: 2-6, ale TYLKO tyle ile pozwala utrzymać >=40% szansy.
+Matematyka: szansa_kuponu = p1 × p2 × ... × pN (iloczyn pewności każdej nogi).
+
+Progi pewności minimalnej per noga (żeby utrzymać 40% przy N nogach):
+  2 nogi: każda noga >= 63%
+  3 nogi: każda noga >= 74%
+  4 nogi: każda noga >= 80%
+  5 nogi: każda noga >= 83%
+  6 nogi: każda noga >= 86%
+
+ZASADA: dodaj nogę TYLKO jeśli jej pewność jest wystarczająco wysoka żeby produkt >= 40%.
+Zacznij od najsilniejszych typów i dodawaj kolejne tylko gdy spełniają próg.
+Jeśli nie ma 6 typów z >=86% — zrób mniej nóg.
+KUPON A: zbuduj z 2-6 nóg z max pewnością, kurs łączny dobierz naturalnie.
+KUPON B: alternatywna kombinacja, inne mecze lub inne rynki, też >=40% szansy."""
+
+    def _opis_kuponu(label: str, cel: float | None, default_cel: float, default_kurs: str, min_szansa: int) -> str:
+        if cel is None:
+            return f"{label}: kurs ~{default_kurs}, szansa min {min_szansa}%."
+        kurs_docelowy = round(cel / (stawka * 0.88), 1)
+        return (
+            f"{label}: CEL wygrana netto ~{cel:.0f} PLN od stawki {stawka:.0f} PLN.\n"
+            f"  Wymagany kurs_laczny ~{kurs_docelowy:.1f}x.\n"
+            f"  Szansa min {min_szansa}% (akceptuj mniej nóg jeśli trzeba — cel kursu ważniejszy).\n"
+            f"  Dobieraj nogi o najwyższym EV_netto w tej samej lidze, unikaj >2 nóg z tej samej ligi."
+        )
+
+    opis_a = _opis_kuponu("KUPON A", cel_a, 50.0, "11-14x", 25)
+    opis_b = _opis_kuponu("KUPON B", cel_b, 100.0, "22-28x", 15)
+
+    return f"""Zbuduj 2 kupony AKO z podanymi celami. Kurs łączny jest PRIORYTETEM nad min szansą.
+Zasada singla: pojedyncza noga tylko gdy kurs >= 1.80. Kurs 1.35-1.80 tylko jako noga AKO.
+Min 3 nogi, max 6 nóg na kupon. Max 2 nogi z tej samej ligi. Nie łącz typów z jednego meczu.
+WAŻNE: aby osiągnąć wysoki kurs, musisz zebrać 4-6 nóg — nie buduj singla ani 2-nożnego kuponu!
+
+ZASADA WSPÓLNYCH NÓG (kotwice):
+- Noga z pewnosc_pct >= 75% to KOTWICA — może pojawić się w obu kuponach (to dobra dywersyfikacja).
+- Noga z pewnosc_pct < 75% musi być UNIKALNA — wchodzi tylko do jednego kuponu.
+- Kupon B musi różnić się od A przynajmniej w 2 nogach poniżej 75% pewności (inne mecze / inne typy).
+
+{opis_a}
+{opis_b}"""
+
+
+def ai_analiza_pewniaczki(
+    wyniki: list,
+    pobierz_forme: bool = True,
+    cel_wygrana_a: float | None = None,
+    cel_wygrana_b: float | None = None,
+    stawka: float = 10.0,
+) -> dict:
     """
     Groq analizuje listę pewniaczków (quick_picks lub weekly_picks).
 
     Wejście: lista z szybkie_pewniaczki_2dni() lub pewniaczki_tygodnia()
     pobierz_forme: czy próbować pobrać formę z SofaScore dla TOP 5 meczów
+    cel_wygrana_a/b: opcjonalny cel wygranej netto PLN (np. 50, 100) — zmienia instrukcję kursu
+    stawka: stawka PLN, używana do obliczenia celu kursu
     Wyjście: słownik JSON z kluczami top3, kupon_a, kupon_b, ostrzezenia.
       Jeśli parsowanie JSON się nie powiodło, zawiera klucz _raw z surowym tekstem.
     """
@@ -894,23 +950,8 @@ KONTEKST ZBIORU:
 PODATEK: 12% zryczałtowany. Wzór netto: stawka × kurs_łączny × 0.88
 EV(brutto) w danych jest PRZED podatkiem — po podatku realny zysk jest o ~12% niższy.
 
-== FILOZOFIA KUPONÓW — ZASADA 40% ==
-Oba kupony muszą mieć szansa_wygranej_pct >= 40%.
-Liczba nóg: 2-6, ale TYLKO tyle ile pozwala utrzymać >=40% szansy.
-Matematyka: szansa_kuponu = p1 × p2 × ... × pN (iloczyn pewności każdej nogi).
-
-Progi pewności minimalnej per noga (żeby utrzymać 40% przy N nogach):
-  2 nogi: każda noga >= 63%
-  3 nogi: każda noga >= 74%
-  4 nogi: każda noga >= 80%
-  5 nogi: każda noga >= 83%
-  6 nogi: każda noga >= 86%
-
-ZASADA: dodaj nogę TYLKO jeśli jej pewność jest wystarczająco wysoka żeby produkt >= 40%.
-Zacznij od najsilniejszych typów i dodawaj kolejne tylko gdy spełniają próg.
-Jeśli nie ma 6 typów z >=86% — zrób mniej nóg.
-KUPON A: zbuduj z 2-6 nóg z max pewnością, kurs łączny dobierz naturalnie.
-KUPON B: alternatywna kombinacja, inne mecze lub inne rynki, też >=40% szansy.
+== FILOZOFIA KUPONÓW ==
+{_buduj_cel_kuponow(cel_wygrana_a, cel_wygrana_b, stawka)}
 
 MECZE:
 {chr(10).join(mecze_opisy)}
@@ -929,39 +970,94 @@ ZADANIE: Odpowiedz TYLKO w JSON (bez tekstu przed/po):
   ],
   "kupon_a": {{
     "zdarzenia": [
-      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "1", "kurs": 1.55, "pewnosc_pct": 74}}
+      {{"nr": 1, "mecz": "Druzyna1 vs Druzyna2", "typ": "1", "kurs": 1.55, "pewnosc_pct": 70}},
+      {{"nr": 2, "mecz": "Druzyna3 vs Druzyna4", "typ": "Over", "kurs": 1.80, "pewnosc_pct": 65}},
+      {{"nr": 3, "mecz": "Druzyna5 vs Druzyna6", "typ": "1", "kurs": 1.65, "pewnosc_pct": 68}},
+      {{"nr": 4, "mecz": "Druzyna7 vs Druzyna8", "typ": "BTTS", "kurs": 1.90, "pewnosc_pct": 62}}
     ],
-    "kurs_laczny": 3.8,
-    "szansa_wygranej_pct": 48,
-    "wygrana_netto": 33.4
+    "kurs_laczny": 8.7,
+    "szansa_wygranej_pct": 19.4,
+    "wygrana_netto": 38.3
   }},
   "kupon_b": {{
     "zdarzenia": [
-      {{"nr": 1, "mecz": "Gospodarz vs Goscie", "typ": "Over", "kurs": 1.75, "pewnosc_pct": 68}}
+      {{"nr": 1, "mecz": "Druzyna1 vs Druzyna2", "typ": "1", "kurs": 1.75, "pewnosc_pct": 64}},
+      {{"nr": 2, "mecz": "Druzyna3 vs Druzyna4", "typ": "2", "kurs": 2.10, "pewnosc_pct": 60}},
+      {{"nr": 3, "mecz": "Druzyna5 vs Druzyna6", "typ": "Over", "kurs": 1.85, "pewnosc_pct": 62}},
+      {{"nr": 4, "mecz": "Druzyna7 vs Druzyna8", "typ": "1", "kurs": 1.60, "pewnosc_pct": 66}},
+      {{"nr": 5, "mecz": "Druzyna9 vs Druzyna10", "typ": "BTTS", "kurs": 1.75, "pewnosc_pct": 63}}
     ],
-    "kurs_laczny": 9.5,
-    "szansa_wygranej_pct": 28,
-    "wygrana_netto": 41.8
+    "kurs_laczny": 19.2,
+    "szansa_wygranej_pct": 9.7,
+    "wygrana_netto": 84.5
   }},
   "ostrzezenia": "2-3 zdania o ryzykach"
 }}
 
 ZAKAZY BEZWZGLEDNE:
 - Kurs zdarzenia < 1.20: NIGDY.
-- Max 4 nogi w AKO — bez wyjątków.
+- Max 6 nogi w AKO (min 3 gdy cel kursu > 5x).
 - Grupy spadkowe/relegacyjne + Over 2.5: ZABRONIONE.
 - BetBuilder (Over+BTTS z jednego meczu): ZABRONIONE.
 - Maks. 2 mecze z tej samej ligi w jednym kuponie.
-- NIE wkładaj meczu do kuponu tylko dlatego że "podnosi kurs" — każda noga musi mieć >60% pewności."""
+- Każda noga musi mieć pewnosc_pct >= 60% — nie dokładaj nóg poniżej tego progu.
+- Wspólne nogi A↔B: dozwolone TYLKO przy pewnosc_pct >= 75%. Poniżej 75% — unikalne dla jednego kuponu."""
 
     tekst = _zapytaj_typera(prompt, max_tokens=1400)
     dane = _wyciagnij_json(tekst)
     if "top3" not in dane:
         dane["_raw"] = tekst
     else:
-        _wymusz_40pct(dane)
+        # Deduplikacja: usuń z kuponu B nogi wspólne z A o niskiej pewności
+        _deduplikuj_kupony(dane, min_wspolna_pewnosc=75)
+        # Walidacja minimalnej szansy: niski próg gdy podany cel kursu
+        if cel_wygrana_a is not None or cel_wygrana_b is not None:
+            _wymusz_40pct(dane, min_szansa=5.0)
+        else:
+            _wymusz_40pct(dane, min_szansa=40.0)
         _auto_zapisz_backtest(dane, wyniki)
     return dane
+
+
+def _deduplikuj_kupony(dane: dict, min_wspolna_pewnosc: int = 75) -> None:
+    """
+    Usuwa z kupon_b nogi współdzielone z kupon_a gdy pewnosc_pct < min_wspolna_pewnosc.
+    Nogi o wysokiej pewności (kotwice >=75%) mogą być w obu kuponach — to legalna dywersyfikacja.
+    Przelicza kurs_laczny i szansa_wygranej_pct kupon_b po przycinaniu.
+    """
+    import math
+
+    a_zdarzenia = (dane.get("kupon_a") or {}).get("zdarzenia", [])
+    b_zdarzenia = (dane.get("kupon_b") or {}).get("zdarzenia", [])
+    if not a_zdarzenia or not b_zdarzenia:
+        return
+
+    # Klucz identyfikujący nogę: mecz + typ (lowercase, stripped)
+    a_klucze_slabe = {
+        (z.get("mecz", "").lower().strip(), z.get("typ", "").lower().strip())
+        for z in a_zdarzenia
+        if z.get("pewnosc_pct", 0) < min_wspolna_pewnosc
+    }
+
+    nowe_b = [
+        z for z in b_zdarzenia
+        if (z.get("mecz", "").lower().strip(), z.get("typ", "").lower().strip())
+        not in a_klucze_slabe
+    ]
+
+    if len(nowe_b) == len(b_zdarzenia):
+        return  # nic nie usunięto
+
+    kupon_b = dane["kupon_b"]
+    kupon_b["zdarzenia"] = nowe_b
+    if nowe_b:
+        kurs_l = math.prod(float(z.get("kurs", 1.0)) for z in nowe_b)
+        szansa = math.prod(z.get("pewnosc_pct", 50) / 100.0 for z in nowe_b) * 100
+    else:
+        kurs_l, szansa = 1.0, 0.0
+    kupon_b["kurs_laczny"] = round(kurs_l, 2)
+    kupon_b["szansa_wygranej_pct"] = round(szansa, 1)
+    kupon_b["_deduped"] = True
 
 
 def _wymusz_40pct(dane: dict, min_szansa: float = 40.0) -> None:
