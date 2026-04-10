@@ -464,6 +464,10 @@ def main():
     parser.add_argument("--dni",      type=int,   default=3,    help="Horyzont w dniach (domyslnie 3)")
     parser.add_argument("--tylko-kupon", action="store_true",   help="Pomiń formę SofaScore")
     parser.add_argument("--waliduj",     action="store_true",   help="Uruchom walidację Groq kuponu A")
+    parser.add_argument(
+        "--faza", choices=["draft", "final"], default=None,
+        help="Faza: draft (08:00, bez składów) lub final (1h przed meczem, ze składami)"
+    )
     args = parser.parse_args()
 
     from footstats.config import AGENT_BANKROLL
@@ -549,6 +553,87 @@ def main():
 
     console.print()
     console.print("[bold green]Gotowe.[/bold green] Powodzenia!\n")
+
+
+# ── Nowe: fazy i decision score ────────────────────────────────────────────
+
+def _decision_score_kandydat(kandydat: dict, phase: str = "draft") -> tuple[int, list[str]]:
+    """Wrapper — konwertuje kandydata Bzzoiro → format decision_score."""
+    from footstats.core.decision_score import score_kandydat
+    w = {
+        "ev_netto":       kandydat.get("ev_netto", 0),
+        "pewnosc":        kandydat.get("pewnosc", 0.5),
+        "czynniki":       kandydat.get("czynniki", []),
+        "roznica_modeli": kandydat.get("roznica_modeli", 0.0),
+        "accuracy":       kandydat.get("accuracy", 0.0),
+    }
+    context = {
+        "lineup_ok":       kandydat.get("lineup_ok", None),
+        "referee_neutral": kandydat.get("referee_neutral", True),
+    }
+    return score_kandydat(w, context=context, phase=phase)
+
+
+def _filtruj_przez_decision_score(
+    kandydaci: list[dict],
+    phase: str = "draft",
+    prog: int | None = None,
+) -> list[dict]:
+    """
+    Filtruje kandydatów przez decision_score.
+    Dodaje 'decision_score' i 'decision_reasons' do każdego kandydata.
+    Zwraca tylko kandydatów >= prog.
+    """
+    from footstats.core.decision_score import PROG_DRAFT, PROG_FINAL
+    threshold = prog if prog is not None else (PROG_FINAL if phase == "final" else PROG_DRAFT)
+
+    wynik = []
+    for k in kandydaci:
+        sc, reasons = _decision_score_kandydat(k, phase=phase)
+        k["decision_score"] = sc
+        k["decision_reasons"] = reasons
+        if sc >= threshold:
+            wynik.append(k)
+    return wynik
+
+
+def _zapisz_kupon_do_db(
+    kandydaci: list[dict],
+    phase: str,
+    groq_resp: str | None,
+    stake: float,
+    total_odds: float,
+) -> int | None:
+    """Zapisuje kupon do SQLite coupon_tracker. Zwraca coupon_id lub None."""
+    try:
+        from footstats.core.coupon_tracker import save_coupon, init_coupon_tables
+        init_coupon_tables()
+        legs = [
+            {
+                "home": k.get("gospodarz", ""),
+                "away": k.get("goscie", ""),
+                "tip": k.get("tip", ""),
+                "odds": k.get("kurs", 1.0),
+                "decision_score": k.get("decision_score", 0),
+            }
+            for k in kandydaci
+        ]
+        from datetime import datetime as _dt
+        match_date = _dt.now().strftime("%Y-%m-%d")
+        avg_score = int(sum(k.get("decision_score", 0) for k in kandydaci) / max(len(kandydaci), 1))
+        return save_coupon(
+            phase=phase,
+            kupon_type="A",
+            legs=legs,
+            total_odds=round(total_odds, 2),
+            stake_pln=stake,
+            groq_reasoning=groq_resp or "",
+            decision_score=avg_score,
+            match_date_first=match_date,
+        )
+    except Exception as e:
+        console.print(f"[yellow]Warning: Nie udało się zapisać kuponu do DB: {e}[/yellow]")
+        return None
 
 
 if __name__ == "__main__":
