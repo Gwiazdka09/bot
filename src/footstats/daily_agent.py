@@ -507,6 +507,36 @@ def main():
     if not wyniki:
         _blad("Bzzoiro nie zwrocilo zadnych kandydatow.")
 
+    # -- Faza draft/final: decision_score pre-filter + enrichment ──────────────
+    if args.faza:
+        _sep(f"DECISION SCORE — faza {args.faza.upper()}")
+        wyniki_przed = len(wyniki)
+        wyniki_filtered = _filtruj_przez_decision_score(wyniki, phase=args.faza)
+        if wyniki_filtered:
+            wyniki = wyniki_filtered
+            console.print(
+                f"[cyan]Decision Score filter [{args.faza}]: "
+                f"{wyniki_przed} → {len(wyniki)} kandydatów "
+                f"(próg {'60' if args.faza == 'final' else '40'})[/cyan]"
+            )
+        else:
+            console.print(
+                f"[yellow]Decision Score: wszyscy poniżej progu — kontynuuję bez filtra "
+                f"(brak pól EV/pewność w kandydatach)[/yellow]"
+            )
+
+        if args.faza == "final":
+            _sep("FAZA FINAL — Składy + Sędzia (API-Football)")
+            _enrichuj_finalna_faza(wyniki, os.getenv("APISPORTS_KEY", ""))
+            # Re-score z lineup/referee context
+            wyniki_re = _filtruj_przez_decision_score(wyniki, phase="final")
+            if wyniki_re:
+                wyniki = wyniki_re
+            console.print(f"[cyan]Final re-score: {len(wyniki)} kandydatów po wzbogaceniu[/cyan]")
+
+        if args.faza == "draft":
+            _zapisz_next_final_txt(wyniki)
+
     if not args.tylko_kupon:
         _sep("KROK 2 — Forma SofaScore")
         _wzbogac_forme_top(wyniki, top_n=6)
@@ -524,6 +554,22 @@ def main():
 
     if args.waliduj:
         _waliduj_kupon_groq(dane, args.stawka, "kupon_a")
+
+    # -- Faza: zapisz kupon do SQLite DB ───────────────────────────────────────
+    if args.faza:
+        kupon_a_db = dane.get("kupon_a", {})
+        zdarzenia_db = kupon_a_db.get("zdarzenia", [])
+        kurs_db = kupon_a_db.get("kurs_laczny", 1.0) or 1.0
+        if zdarzenia_db:
+            cid = _zapisz_kupon_do_db(
+                zdarzenia_db,
+                phase=args.faza,
+                groq_resp=dane.get("_raw", ""),
+                stake=args.stawka,
+                total_odds=kurs_db,
+            )
+            if cid:
+                console.print(f"[green]✅ Kupon zapisany do DB — ID: {cid} | faza: {args.faza}[/green]")
 
     # Zapisz do TXT
     sciezka_txt = _zapisz_txt(dane, args.stawka, args.stawka_b)
@@ -553,6 +599,125 @@ def main():
 
     console.print()
     console.print("[bold green]Gotowe.[/bold green] Powodzenia!\n")
+
+
+# ── Nowe: enrichment fazy final ───────────────────────────────────────────
+
+def _enrichuj_finalna_faza(wyniki: list, api_key: str) -> None:
+    """
+    Faza final: dla każdego kandydata pobiera składy i sędziego z API-Football.
+    Aktualizuje pola lineup_ok, referee_neutral, referee_signal in-place.
+    """
+    if not api_key:
+        console.print("[dim]APISPORTS_KEY niedostępny — pomijam enrichment składów/sędziego[/dim]")
+        return
+
+    import requests as _req
+    from datetime import date
+    from footstats.scrapers.lineup_scraper import get_lineup
+    from footstats.scrapers.referee_db import referee_signal
+
+    dzis = date.today().isoformat()
+    try:
+        resp = _req.get(
+            "https://v3.football.api-sports.io/fixtures",
+            params={"date": dzis, "status": "NS"},
+            headers={"x-apisports-key": api_key},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        fixtures = resp.json().get("response", [])
+    except Exception as e:
+        console.print(f"[yellow]API-Football fixtures: {e} — pomijam enrichment[/yellow]")
+        return
+
+    # Indeks (norm_home, norm_away) → fixture_data
+    idx: dict = {}
+    for f in fixtures:
+        teams = f.get("teams", {})
+        fh = _norm(teams.get("home", {}).get("name", ""))
+        fa = _norm(teams.get("away", {}).get("name", ""))
+        if fh and fa:
+            idx[(fh, fa)] = f
+
+    enriched = 0
+    for k in wyniki:
+        gh = _norm(k.get("gospodarz", ""))
+        ga = _norm(k.get("goscie", ""))
+
+        fixture = idx.get((gh, ga))
+        if fixture is None:
+            for (fh, fa), f in idx.items():
+                if (gh in fh or fh in gh) and (ga in fa or fa in ga):
+                    fixture = f
+                    break
+        if fixture is None:
+            continue
+
+        fixture_id = fixture.get("fixture", {}).get("id")
+
+        # Składy
+        if fixture_id:
+            lineup = get_lineup(fixture_id, api_key)
+            k["lineup_ok"] = (
+                lineup is not None
+                and not lineup.get("home", {}).get("missing_key_players", True)
+                and not lineup.get("away", {}).get("missing_key_players", True)
+            )
+        else:
+            k["lineup_ok"] = None
+
+        # Sędzia
+        ref_name = (fixture.get("fixture", {}).get("referee") or "").split(",")[0].strip()
+        if ref_name:
+            sig = referee_signal(ref_name)
+            k["referee_neutral"] = sig in ("NEUTRALNY", "NIEZNANY")
+            k["referee_name"] = ref_name
+            k["referee_signal"] = sig
+
+        enriched += 1
+        console.print(
+            f"[dim]  {k.get('gospodarz')} vs {k.get('goscie')}: "
+            f"lineup_ok={k.get('lineup_ok')} | sędzia={k.get('referee_signal', 'N/A')}[/dim]"
+        )
+
+    console.print(f"[cyan]Final enrichment: {enriched}/{len(wyniki)} kandydatów wzbogacono[/cyan]")
+
+
+def _zapisz_next_final_txt(wyniki: list) -> None:
+    """
+    Zapisuje czas uruchomienia fazy final (pierwszy mecz − 70 min) do data/next_final.txt.
+    Fallback: 13:30 gdy brak danych o godzinie meczu.
+    """
+    from datetime import datetime as _dt, timedelta
+
+    DATA_DIR = Path(__file__).parents[2] / "data"
+    DATA_DIR.mkdir(exist_ok=True)
+
+    czasy = []
+    for k in wyniki:
+        for pole in ("kickoff", "godzina", "datetime", "data", "time", "date"):
+            val = k.get(pole)
+            if val and isinstance(val, str):
+                for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%H:%M"):
+                    try:
+                        t = _dt.strptime(val[:16], fmt[:len(val[:16])])
+                        if t.hour > 0:  # ignoruj daty bez godziny
+                            czasy.append(t)
+                        break
+                    except ValueError:
+                        continue
+
+    if czasy:
+        pierwszy = min(czasy)
+        final_time = pierwszy - timedelta(minutes=70)
+        txt = final_time.strftime("%H:%M")
+    else:
+        txt = "13:30"  # fallback: mecze popołudniowe
+
+    out = DATA_DIR / "next_final.txt"
+    out.write_text(txt, encoding="utf-8")
+    console.print(f"[dim]next_final.txt → {txt} (czas startu fazy final)[/dim]")
 
 
 # ── Nowe: fazy i decision score ────────────────────────────────────────────

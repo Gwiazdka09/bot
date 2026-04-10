@@ -1,6 +1,6 @@
 # Prediction Engine v2 — Plan 1: Core Loop
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Zamknąć pętlę uczenia: śledzić kupony w SQLite, automatycznie weryfikować wyniki po 23:00, i oceniać kandydatów score 0-100 przed wejściem w kupon.
 
@@ -41,7 +41,7 @@ Istniejące pliki czytane (nie modyfikowane w tym planie):
 - Create: `src/footstats/core/coupon_tracker.py`
 - Create: `tests/test_coupon_tracker.py`
 
-- [ ] **Step 1.1: Napisz testy (TDD — najpierw testy)**
+- [x] **Step 1.1: Napisz testy (TDD — najpierw testy)**
 
 Utwórz `tests/test_coupon_tracker.py`:
 
@@ -121,7 +121,7 @@ def test_predictions_table_gets_coupon_id_column():
     init_coupon_tables()  # drugi raz — idempotentne
 ```
 
-- [ ] **Step 1.2: Uruchom testy — upewnij się że FAIL**
+- [x] **Step 1.2: Uruchom testy — upewnij się że FAIL**
 
 ```
 pytest tests/test_coupon_tracker.py -v
@@ -129,7 +129,7 @@ pytest tests/test_coupon_tracker.py -v
 
 Oczekiwany wynik: `ERROR` — `ModuleNotFoundError: No module named 'footstats.core.coupon_tracker'`
 
-- [ ] **Step 1.3: Utwórz `src/footstats/core/coupon_tracker.py`**
+- [x] **Step 1.3: Utwórz `src/footstats/core/coupon_tracker.py`**
 
 ```python
 """
@@ -282,7 +282,7 @@ def get_coupon_legs(coupon_id: int) -> list[dict]:
         return json.loads(row["legs_json"])
 ```
 
-- [ ] **Step 1.4: Uruchom testy — upewnij się że PASS**
+- [x] **Step 1.4: Uruchom testy — upewnij się że PASS**
 
 ```
 pytest tests/test_coupon_tracker.py -v
@@ -299,7 +299,7 @@ tests/test_coupon_tracker.py::test_get_coupon_legs_unknown_id_returns_empty PASS
 tests/test_coupon_tracker.py::test_predictions_table_gets_coupon_id_column PASSED
 ```
 
-- [ ] **Step 1.5: Commit**
+- [x] **Step 1.5: Commit**
 
 ```bash
 git add src/footstats/core/coupon_tracker.py tests/test_coupon_tracker.py
@@ -314,7 +314,7 @@ git commit -m "feat: coupon_tracker — SQLite CRUD dla kuponów (Task 1)"
 - Create: `src/footstats/core/decision_score.py`
 - Create: `tests/test_decision_score.py`
 
-- [ ] **Step 2.1: Napisz testy**
+- [x] **Step 2.1: Napisz testy**
 
 Utwórz `tests/test_decision_score.py`:
 
@@ -447,7 +447,7 @@ def test_pewnosc_as_percentage_normalized():
     assert score >= 20  # confidence > 70% → +20
 ```
 
-- [ ] **Step 2.2: Uruchom testy — upewnij się że FAIL**
+- [x] **Step 2.2: Uruchom testy — upewnij się że FAIL**
 
 ```
 pytest tests/test_decision_score.py -v
@@ -455,7 +455,7 @@ pytest tests/test_decision_score.py -v
 
 Oczekiwany: `ERROR — ModuleNotFoundError: No module named 'footstats.core.decision_score'`
 
-- [ ] **Step 2.3: Utwórz `src/footstats/core/decision_score.py`**
+- [x] **Step 2.3: Utwórz `src/footstats/core/decision_score.py`**
 
 ```python
 """
@@ -575,7 +575,7 @@ def is_go(score: int, phase: str = "draft") -> bool:
     return score >= (PROG_FINAL if phase == "final" else PROG_DRAFT)
 ```
 
-- [ ] **Step 2.4: Uruchom testy — upewnij się że PASS**
+- [x] **Step 2.4: Uruchom testy — upewnij się że PASS**
 
 ```
 pytest tests/test_decision_score.py -v
@@ -583,7 +583,7 @@ pytest tests/test_decision_score.py -v
 
 Oczekiwany wynik: wszystkie 13 testów PASSED.
 
-- [ ] **Step 2.5: Commit**
+- [x] **Step 2.5: Commit**
 
 ```bash
 git add src/footstats/core/decision_score.py tests/test_decision_score.py
@@ -598,7 +598,7 @@ git commit -m "feat: decision_score — score 0-100 go/no-go dla kandydatów (Ta
 - Create: `src/footstats/evening_agent.py`
 - Create: `tests/test_evening_agent.py`
 
-- [ ] **Step 3.1: Napisz testy z mock API-Football**
+- [x] **Step 3.1: Napisz testy z mock API-Football**
 
 Utwórz `tests/test_evening_agent.py`:
 
@@ -757,7 +757,7 @@ def test_run_evening_agent_pending_when_no_result():
     assert len(active) == 1  # nadal aktywny
 ```
 
-- [ ] **Step 3.2: Uruchom testy — upewnij się że FAIL**
+- [x] **Step 3.2: Uruchom testy — upewnij się że FAIL**
 
 ```
 pytest tests/test_evening_agent.py -v
@@ -765,7 +765,7 @@ pytest tests/test_evening_agent.py -v
 
 Oczekiwany: `ERROR — ModuleNotFoundError: No module named 'footstats.evening_agent'`
 
-- [ ] **Step 3.3: Utwórz `src/footstats/evening_agent.py`**
+- [x] **Step 3.3: Utwórz `src/footstats/evening_agent.py`**
 
 ```python
 """
@@ -1010,7 +1010,7 @@ if __name__ == "__main__":
     run_evening_agent(args.date)
 ```
 
-- [ ] **Step 3.4: Uruchom testy — upewnij się że PASS**
+- [x] **Step 3.4: Uruchom testy — upewnij się że PASS**
 
 ```
 pytest tests/test_evening_agent.py -v
@@ -1018,7 +1018,7 @@ pytest tests/test_evening_agent.py -v
 
 Oczekiwany wynik: wszystkie 12 testów PASSED.
 
-- [ ] **Step 3.5: Uruchom pełny suite — zero regresji**
+- [x] **Step 3.5: Uruchom pełny suite — zero regresji**
 
 ```
 pytest tests/ -v --tb=short
@@ -1026,7 +1026,7 @@ pytest tests/ -v --tb=short
 
 Oczekiwany wynik: wszystkie poprzednie testy PASS + nowe PASS.
 
-- [ ] **Step 3.6: Commit**
+- [x] **Step 3.6: Commit**
 
 ```bash
 git add src/footstats/evening_agent.py tests/test_evening_agent.py
@@ -1083,7 +1083,7 @@ git commit -m "chore: launcher evening_agent + Task Scheduler 23:00 (Task 4)"
 
 ## Task 5: Weryfikacja integralna i podsumowanie Planu 1
 
-- [ ] **Step 5.1: Uruchom pełny pytest**
+- [x] **Step 5.1: Uruchom pełny pytest**
 
 ```
 pytest tests/ -v
@@ -1095,7 +1095,7 @@ Oczekiwany wynik: **wszystkie testy PASS**, w tym:
 - `tests/test_evening_agent.py` — 12 testów
 - Wszystkie poprzednie testy bez regresji
 
-- [ ] **Step 5.2: Smoke test decision_score na żywym kandydacie**
+- [x] **Step 5.2: Smoke test decision_score na żywym kandydacie**
 
 ```python
 python -c "
@@ -1111,7 +1111,7 @@ print(f'GO: {is_go(score)}')
 
 Oczekiwany wynik: Score=80/100, GO=True.
 
-- [ ] **Step 5.3: Smoke test coupon_tracker**
+- [x] **Step 5.3: Smoke test coupon_tracker**
 
 ```python
 python -c "
@@ -1127,7 +1127,7 @@ print(f'Active after WON: {len(active)}')
 "
 ```
 
-- [ ] **Step 5.4: Commit końcowy Planu 1**
+- [x] **Step 5.4: Commit końcowy Planu 1**
 
 ```bash
 git add -A
