@@ -839,16 +839,31 @@ def _zapisz_kupon_do_db(
             get_draft_today, promote_to_active,
         )
         init_coupon_tables()
-        legs = [
-            {
-                "home": k.get("gospodarz", ""),
-                "away": k.get("goscie", ""),
-                "tip": k.get("tip", ""),
-                "odds": k.get("kurs", 1.0),
+        def _parse_home_away(k: dict) -> tuple[str, str]:
+            """Wyciąga home/away: wprost z pól lub przez split 'mecz'."""
+            home = k.get("gospodarz") or k.get("home", "")
+            away = k.get("goscie")    or k.get("away", "")
+            if not home and not away:
+                mecz = k.get("mecz", "")
+                if " vs " in mecz:
+                    parts = mecz.split(" vs ", 1)
+                    home, away = parts[0].strip(), parts[1].strip()
+                elif " - " in mecz:
+                    parts = mecz.split(" - ", 1)
+                    home, away = parts[0].strip(), parts[1].strip()
+            return home, away
+
+        legs = []
+        for k in kandydaci:
+            home, away = _parse_home_away(k)
+            legs.append({
+                "home":           home,
+                "away":           away,
+                "tip":            k.get("typ") or k.get("tip", ""),
+                "odds":           k.get("kurs", 1.0),
                 "decision_score": k.get("decision_score", 0),
-            }
-            for k in kandydaci
-        ]
+                "mecz":           k.get("mecz", f"{home} vs {away}"),
+            })
         from datetime import datetime as _dt
         match_date = _dt.now().strftime("%Y-%m-%d")
         avg_score = int(sum(k.get("decision_score", 0) for k in kandydaci) / max(len(kandydaci), 1))
