@@ -148,11 +148,22 @@ def send_draft_kupon(coupon_id: int, legs: list[dict], total_odds: float) -> boo
         "<b>Kandydaci:</b>",
     ]
     for leg in legs[:6]:
-        home  = leg.get("home") or leg.get("gospodarz", "?")
-        away  = leg.get("away") or leg.get("goscie", "?")
-        tip   = leg.get("tip", "?")
+        home  = leg.get("home") or leg.get("gospodarz", "")
+        away  = leg.get("away") or leg.get("goscie", "")
+        tip   = leg.get("tip") or leg.get("typ", "?")
         odds  = leg.get("odds") or leg.get("kurs", 0.0)
         score = leg.get("decision_score", 0)
+        # Fallback: parsuj pole "mecz" jeśli brak home/away
+        if not home and not away:
+            mecz = leg.get("mecz", "")
+            if " vs " in mecz:
+                home, away = mecz.split(" vs ", 1)
+            elif " - " in mecz:
+                home, away = mecz.split(" - ", 1)
+            else:
+                home, away = mecz, ""
+        home = home.strip() or "?"
+        away = away.strip() or "?"
         linie.append(f"  \u2022 {home} \u2013 {away} <b>{tip}</b> @{float(odds):.2f} [score={score}]")
     linie.append("\n\u23f3 Status: DRAFT (fina\u0142 ~1h przed meczem)")
     return _send("\n".join(linie))
