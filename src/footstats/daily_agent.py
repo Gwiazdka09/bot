@@ -769,9 +769,18 @@ def _zapisz_kupon_do_db(
     stake: float,
     total_odds: float,
 ) -> int | None:
-    """Zapisuje kupon do SQLite coupon_tracker. Zwraca coupon_id lub None."""
+    """
+    Zapisuje kupon do SQLite coupon_tracker. Zwraca coupon_id lub None.
+
+    DRAFT → nowy rekord status=DRAFT.
+    FINAL → szuka dzisiejszego DRAFT i promuje do ACTIVE;
+            jeśli brak DRAFT — tworzy nowy rekord (fallback).
+    """
     try:
-        from footstats.core.coupon_tracker import save_coupon, init_coupon_tables
+        from footstats.core.coupon_tracker import (
+            save_coupon, init_coupon_tables,
+            get_draft_today, promote_to_active,
+        )
         init_coupon_tables()
         legs = [
             {
@@ -786,6 +795,22 @@ def _zapisz_kupon_do_db(
         from datetime import datetime as _dt
         match_date = _dt.now().strftime("%Y-%m-%d")
         avg_score = int(sum(k.get("decision_score", 0) for k in kandydaci) / max(len(kandydaci), 1))
+
+        if phase == "final":
+            draft_row = get_draft_today()
+            if draft_row:
+                promote_to_active(
+                    coupon_id=draft_row["id"],
+                    legs=legs,
+                    groq_reasoning=groq_resp or "",
+                    decision_score=avg_score,
+                    total_odds=round(total_odds, 2),
+                )
+                console.print(f"[green]Kupon #{draft_row['id']} DRAFT → ACTIVE[/green]")
+                return draft_row["id"]
+            # brak DRAFT z dzisiaj — utwórz nowy jako ACTIVE
+            console.print("[yellow]Brak dzisiejszego DRAFT — tworzę nowy kupon ACTIVE[/yellow]")
+
         return save_coupon(
             phase=phase,
             kupon_type="A",

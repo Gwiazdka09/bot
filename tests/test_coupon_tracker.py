@@ -71,3 +71,56 @@ def test_update_coupon_status_invalid_raises():
     cid = save_coupon("draft", "A", [])
     with pytest.raises(ValueError, match="Nieprawidłowy"):
         update_coupon_status(cid, "INVALID_STATUS")
+
+
+# ── get_draft_today ────────────────────────────────────────────────────────────
+
+def test_get_draft_today_returns_todays_draft():
+    from footstats.core.coupon_tracker import get_draft_today
+    cid = save_coupon("draft", "A", [])
+    row = get_draft_today()
+    assert row is not None
+    assert row["id"] == cid
+
+
+def test_get_draft_today_ignores_active_coupon():
+    from footstats.core.coupon_tracker import get_draft_today
+    cid = save_coupon("final", "A", [], stake_pln=10.0)
+    update_coupon_status(cid, "ACTIVE")
+    row = get_draft_today()
+    assert row is None
+
+
+def test_get_draft_today_none_when_empty():
+    from footstats.core.coupon_tracker import get_draft_today
+    row = get_draft_today()
+    assert row is None
+
+
+# ── promote_to_active ──────────────────────────────────────────────────────────
+
+def test_promote_to_active_changes_status_to_active():
+    from footstats.core.coupon_tracker import promote_to_active
+    cid = save_coupon("draft", "A", [])
+    promote_to_active(cid)
+    active = get_active_coupons()
+    rows = [c for c in active if c["id"] == cid]
+    assert rows, "Kupon powinien być w active_coupons po promocji"
+    assert rows[0]["status"] == "ACTIVE"
+    assert rows[0]["phase"] == "final"
+
+
+def test_promote_to_active_updates_legs_and_reasoning():
+    from footstats.core.coupon_tracker import promote_to_active
+    cid = save_coupon("draft", "A", [{"home": "A", "away": "B"}])
+    new_legs = [{"home": "X", "away": "Y", "tip": "1"}]
+    promote_to_active(cid, legs=new_legs, groq_reasoning="test reason", decision_score=75)
+    assert get_coupon_legs(cid) == new_legs
+
+
+def test_promote_to_active_no_legs_keeps_old_legs():
+    from footstats.core.coupon_tracker import promote_to_active
+    original_legs = [{"home": "PSG", "away": "Lyon"}]
+    cid = save_coupon("draft", "A", original_legs)
+    promote_to_active(cid)  # bez nowych nóg
+    assert get_coupon_legs(cid) == original_legs
