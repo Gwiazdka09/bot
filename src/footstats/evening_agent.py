@@ -31,6 +31,7 @@ from footstats.core.coupon_tracker import (
     STATUS_ACTIVE,
 )
 from footstats.core.backtest import init_db, update_result, _oblicz_tip_correct
+from footstats.core.bankroll import process_win
 
 console = Console()
 
@@ -232,6 +233,10 @@ def run_evening_agent(date_str: str | None = None) -> dict:
                 stake = kupon["stake_pln"] or 10.0
                 odds  = kupon["total_odds"] or 1.0
                 payout = round(stake * odds * 0.88, 2)  # podatek 12%
+            # Zintegrowane dodawanie do bankrolla
+            if nowy_status == "WON" and payout:
+                process_win(payout, f"Wygrana kuponu ID={kupon['id']}")
+                
             update_coupon_status(kupon["id"], nowy_status, payout_pln=payout)
             key = nowy_status.lower()
             summary[key] = summary.get(key, 0) + 1

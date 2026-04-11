@@ -49,8 +49,8 @@ DOMWYJAZD_MIN_M    = 5     # min. mecze dom/wyjazd do analizy
 DOMWYJAZD_PODROZNIK= 0.20  # min. roznica wyjazd-dom w pkt/mecz -> "Podroznik"
 BZZOIRO_MAX_ROZN   = 20.0  # max. roznica (%) Poisson vs Bzzoiro ML bez alarmu
 AGENT_KANDYDAT_PROG = 0.55 # prog pewnosci dla daily_agent (nizszy niz PEWNIACZEK_PROG zeby dac Groq wiecej opcji)
-AGENT_BANKROLL      = 200.0 # bankroll do Kelly Criterion (PLN)
-AGENT_KELLY_FRACTION = 3    # bezpieczny fractional Kelly: f*/3
+AGENT_BANKROLL      = 100.0 # bankroll do Kelly Criterion (PLN)
+AGENT_KELLY_FRACTION = 4    # bezpieczny fractional Kelly: f*/4 (bardziej konserwatywny dla 100 PLN)
 
 # Klucze .env – nazwy zmiennych srodowiskowych
 ENV_FOOTBALL   = "FOOTBALL_API_KEY"   # football-data.org

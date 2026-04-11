@@ -55,6 +55,7 @@ def _pobierz_kandydatow(dni: int = 2) -> tuple[list, dict]:
 
     from footstats.scrapers.bzzoiro import BzzoiroClient, ENV_BZZOIRO
     from footstats.core.quick_picks import szybkie_pewniaczki_2dni
+    from footstats.config import AGENT_KANDYDAT_PROG
 
     klucz = os.getenv(ENV_BZZOIRO, "")
     if not klucz:
@@ -65,7 +66,6 @@ def _pobierz_kandydatow(dni: int = 2) -> tuple[list, dict]:
     if not ok:
         _blad(f"Bzzoiro: {msg}")
 
-    from footstats.config import AGENT_KANDYDAT_PROG
     wyniki = szybkie_pewniaczki_2dni(c, prog=AGENT_KANDYDAT_PROG, godziny=dni * 24)
     console.print(f"[dim]Bzzoiro: {len(wyniki)} kandydatów w oknie {dni*24}h[/dim]")
 
@@ -125,6 +125,26 @@ def _wzbogac_forme_top(wyniki: list, top_n: int = 6) -> None:
         except Exception:
             pass
 
+
+def _wzbogac_o_betbuilder(wyniki: list) -> None:
+    try:
+        from footstats.core.bet_builder import estimate_lambdas_from_probs, get_betbuilder_suggestions
+    except ImportError:
+        return
+    
+    console.print("[dim]BetBuilder: Estymacja macierzy Poissona i generowanie sugestii łączonych...[/dim]")
+    for w in wyniki:
+        pw = w.get("pw", 0) / 100.0
+        pp = w.get("pp", 0) / 100.0
+        o25 = w.get("o25", 0) / 100.0
+        
+        if pw > 0 or pp > 0:
+            # Estymujemy bazowe expected goals (lambda) na bazie probability
+            lh, la = estimate_lambdas_from_probs(pw, pp, o25)
+            ref_avg = w.get("referee_avg_y")
+            sugestie = get_betbuilder_suggestions(lh, la, ref_avg_yellow=ref_avg)
+            if sugestie:
+                w["bet_builder"] = sugestie
 
 # ── Krok 3: Groq AI ───────────────────────────────────────────────────────────
 
@@ -440,7 +460,7 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
         for z in dane.get(kupon_key, {}).get("zdarzenia", []):
             p     = z.get("pewnosc_pct", 50) / 100.0
             odds  = z.get("kurs", 1.0)
-            z["kelly_stake"] = kelly_stake(p, odds, bankroll)
+            z["kelly_stake"] = kelly_stake(p, odds, bankroll=bankroll)
 
     for row in dane.get("top3", []):
         p    = row.get("pewnosc_pct", 50) / 100.0
@@ -492,14 +512,16 @@ def main():
     args = parser.parse_args()
 
     from footstats.config import AGENT_BANKROLL
+    from footstats.core.bankroll import get_current_bankroll
 
+    current_bankroll = get_current_bankroll()
     date_label = args.date or datetime.now().strftime("%Y-%m-%d")
     dry_tag    = "  [yellow]⚠ DRY-RUN[/yellow]" if args.dry_run else ""
 
     console.print()
     console.print(Panel(
         f"[bold]FootStats Daily Agent[/bold]  |  {date_label}{dry_tag}\n"
-        f"Horyzont: {args.dni} dni  |  Stawka A: {args.stawka} PLN  |  Stawka B: {args.stawka_b} PLN  |  Bankroll: {AGENT_BANKROLL} PLN",
+        f"Horyzont: {args.dni} dni  |  Stawka A: {args.stawka} PLN  |  Stawka B: {args.stawka_b} PLN  |  Bankroll: {current_bankroll} PLN",
         border_style="cyan",
     ))
 
@@ -537,6 +559,15 @@ def main():
     # Ensemble: oblicz roznica_modeli (Poisson vs Bzzoiro) dla każdego kandydata
     _oblicz_roznica_modeli(wyniki)
 
+    # -- Pre-filtr tokenów: odrzuca mecze bez pełnej nazwy drużyny lub ligi ──
+    n_przed_token = len(wyniki)
+    wyniki = _pre_filtruj_tokenow(wyniki)
+    if len(wyniki) < n_przed_token:
+        console.print(
+            f"[dim]Pre-filtr tokenów (brak nazw/ligi): "
+            f"{n_przed_token} → {len(wyniki)} kandydatów[/dim]"
+        )
+
     # -- Pre-filtr kursów: oszczędza tokeny Groq (odrzuca <1.15 i >15.0) ───────
     n_przed_filter = len(wyniki)
     wyniki = _pre_filtruj_kursy(wyniki)
@@ -548,17 +579,17 @@ def main():
 
     # -- Faza draft/final: enrichment składów/sędziego (Decision Score → po Groq) ──
     if args.faza:
-        if args.faza == "final":
-            _sep("FAZA FINAL — Składy + Sędzia (API-Football)")
-            _enrichuj_finalna_faza(wyniki, os.getenv("APISPORTS_KEY", ""))
-            console.print(f"[cyan]Final: {len(wyniki)} kandydatów po wzbogaceniu składów[/cyan]")
+        _sep(f"FAZA {args.faza.upper()} — Składy + Sędzia (API-Football)")
+        _enrichuj_finalna_faza(wyniki, os.getenv("APISPORTS_KEY", ""))
+        console.print(f"[cyan]{args.faza.capitalize()}: {len(wyniki)} kandydatów po wzbogaceniu o składy/sędziego[/cyan]")
 
         if args.faza == "draft":
             _zapisz_next_final_txt(wyniki)
 
     if not args.tylko_kupon:
         _sep("KROK 2 — Forma SofaScore")
-        _wzbogac_forme_top(wyniki, top_n=6)
+        _wzbogac_forme_top(wyniki, top_n=12)
+        _wzbogac_o_betbuilder(wyniki)
 
     _sep("KROK 3 — Groq AI")
     dane = _analizuj_groq(wyniki, cel_wygrana_a=args.cel_a, cel_wygrana_b=args.cel_b, stawka=args.stawka)
@@ -567,7 +598,7 @@ def main():
     dane = _weryfikuj_kupony(dane, indeks)
 
     # Krok 4b: Dodaj Kelly do kazdej nogi
-    _dodaj_kelly(dane, AGENT_BANKROLL)
+    _dodaj_kelly(dane, current_bankroll)
 
     # Krok 4c: Decision Score post-Groq — teraz pewnosc_pct i ev_netto są rzeczywiste
     if args.faza:
@@ -702,7 +733,8 @@ def _enrichuj_finalna_faza(wyniki: list, api_key: str) -> None:
     import requests as _req
     from datetime import date
     from footstats.scrapers.lineup_scraper import get_lineup
-    from footstats.scrapers.referee_db import referee_signal
+    from footstats.scrapers.referee_db import referee_signal, get_referee
+    from footstats.scrapers.flashscore_match import scrape_match_with_search
 
     dzis = date.today().isoformat()
     try:
@@ -757,10 +789,37 @@ def _enrichuj_finalna_faza(wyniki: list, api_key: str) -> None:
         # Sędzia
         ref_name = (fixture.get("fixture", {}).get("referee") or "").split(",")[0].strip()
         if ref_name:
+            ref_data = get_referee(ref_name)
             sig = referee_signal(ref_name)
             k["referee_neutral"] = sig in ("NEUTRALNY", "NIEZNANY")
             k["referee_name"] = ref_name
             k["referee_signal"] = sig
+            if ref_data:
+                k["referee_avg_y"] = ref_data.get("avg_yellow")
+                k["referee_matches"] = ref_data.get("n_matches")
+        
+        # Fallback Flashscore (jeśli brak sędziego lub dla topowych kuponów)
+        # Pobieramy absencje tylko jeśli mecz jest 'ciekawy' lub jesteśmy w fazie FINAL
+        szukaj_fs = (not k.get("referee_name")) or (args.faza == "final")
+        if szukaj_fs:
+            fs_data = scrape_match_with_search(k.get("gospodarz"), k.get("goscie"))
+            if fs_data.get("success"):
+                if not k.get("referee_name") and fs_data.get("referee"):
+                    k["referee_name"] = fs_data["referee"]
+                    k["referee_signal"] = referee_signal(fs_data["referee"])
+                    # Spróbuj jeszcze raz pobrać statystyki dla nowego nazwiska
+                    ref_data = get_referee(fs_data["referee"])
+                    if ref_data:
+                        k["referee_avg_y"] = ref_data.get("avg_yellow")
+                
+                # Absencje Flashscore
+                abs_h = [f"{a['name']} ({a['reason']})" for a in fs_data["absences"]["home"]]
+                abs_a = [f"{a['name']} ({a['reason']})" for a in fs_data["absences"]["away"]]
+                if abs_h: k["fs_absencje_g"] = ", ".join(abs_h)
+                if abs_a: k["fs_absencje_a"] = ", ".join(abs_a)
+                
+                if fs_data.get("stadium"):
+                    k["stadium"] = fs_data["stadium"]
 
         enriched += 1
         console.print(
@@ -826,6 +885,23 @@ def _pre_filtruj_kursy(kandydaci: list[dict]) -> list[dict]:
         if any(MIN_KURS <= v <= MAX_KURS for v in wartosci):
             wynik.append(k)
     return wynik
+
+
+def _pre_filtruj_tokenow(kandydaci: list[dict]) -> list[dict]:
+    """
+    Walidacja zabezpieczająca tokeny: odrzuca mecze bez pełnej nazwy drużyny 
+    lub przypisanej ligi. Zapobiega to marnowaniu zapytań do gorszych lig/braków danych.
+    """
+    wynik = []
+    for k in kandydaci:
+        gospodarz = k.get("gospodarz") or k.get("home", "")
+        goscie = k.get("goscie") or k.get("away", "")
+        liga = k.get("liga", "")
+        
+        if gospodarz and str(gospodarz).strip() and goscie and str(goscie).strip() and liga and str(liga).strip():
+            wynik.append(k)
+    return wynik
+
 
 
 def _ocen_zdarzenia_decision_score(dane: dict, phase: str = "draft") -> None:
@@ -924,9 +1000,12 @@ def _zapisz_kupon_do_db(
     try:
         from footstats.core.coupon_tracker import (
             save_coupon, init_coupon_tables,
-            get_draft_today, promote_to_active,
+            get_draft_today, promote_to_active
         )
+        from footstats.core.bankroll import process_bet, get_current_bankroll
         init_coupon_tables()
+        current_bankroll = get_current_bankroll()
+        
         def _parse_home_away(k: dict) -> tuple[str, str]:
             """Wyciąga home/away: wprost z pól lub przez split 'mecz'."""
             home = k.get("gospodarz") or k.get("home", "")
@@ -971,7 +1050,7 @@ def _zapisz_kupon_do_db(
             # brak DRAFT z dzisiaj — utwórz nowy jako ACTIVE
             console.print("[yellow]Brak dzisiejszego DRAFT — tworzę nowy kupon ACTIVE[/yellow]")
 
-        return save_coupon(
+        cid = save_coupon(
             phase=phase,
             kupon_type="A",
             legs=legs,
@@ -981,6 +1060,12 @@ def _zapisz_kupon_do_db(
             decision_score=avg_score,
             match_date_first=match_date,
         )
+        
+        # Zintegrowane odejmowanie z bankrolla
+        if cid and stake > 0:
+            process_bet(stake, f"Kupon A ID={cid} ({phase})")
+            
+        return cid
     except Exception as e:
         console.print(f"[yellow]Warning: Nie udało się zapisać kuponu do DB: {e}[/yellow]")
         return None

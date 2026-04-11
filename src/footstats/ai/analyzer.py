@@ -77,6 +77,12 @@ Single value bet:       10-15 PLN gdy EV_netto > 5% i brak czynnikow ostrzegawcz
 Eksperymentalny (>30):   2-3 PLN
 Zasada: nie zmieniaj stawki po wygranej ani po stracie. Emocje to najgorszy doradca.
 
+== RYNEK KARTEK (BetBuilder) ==
+- Sędzia KARTKOWY (avg > 4.3): silny sygnał na Over 3.5 / 4.5 żółtych kartek. 
+- Sędzia NEUTRALNY: unikaj wysokich linii na kartki, chyba że mecz to HIGH_STAKES (CL/Derby).
+- BetBuilder: szukaj korelacji. Jeśli sędzia jest KARTKOWY a mecz jest wyrównany (1X2 ~ kursy 2.50)
+  -> rośnie szansa na frustrację i kartki. Idealne do AKO.
+
 == DOBOR TYPOW ==
 Over 2.5: mocny sygnal gdy lambda_g + lambda_a > 2.8 (Poisson). Sprawdz BTTS jako potwierdzenie.
 Over 1.5: kotwica gdy obie druzyny strzelajace, pewnosc >=95%. Bezpieczne "dokladanie" do AKO.
@@ -115,8 +121,16 @@ HISTORIA RAG:
    Druzyny walczace o przezycie graja defensywnie i chaotycznie. Lambda z sezonu ich nie opisuje.
 3. Duplikacja selekcji miedzy kuponami: max 1 wspolna selekacja.
    Jezeli ta sama noga pada, tracisz podwojnie. To nie dywersyfikacja – to multiplikacja bledu.
-4. BetBuilder WSTRZYMANY – Over+BTTS z jednego meczu sa korelowane, brak modulu wyliczenia.
-5. "Kupon 19 pewniaczkow": NIE BUDUJ. Kazda noga ponizej 1.20 to NIGDY. 19 nog to 19 szans na blad.
+4. "Kupon 19 pewniaczkow": NIE BUDUJ. Kazda noga ponizej 1.20 to NIGDY. 19 nog to 19 szans na blad.
+
+== BET BUILDer (ZAKŁADY ŁĄCZONE) ==
+- Pamiętaj, że zyski z zakładów łączonych dają ogromne "Value". Jeśli widzisz przy danym meczu dostarczoną listę pod kluczem 'bet_builder_sugestie', wolno Ci postawić DOKŁADNIE TEN sugerowany typ (np. "1 & Over 1.5").
+- Uwolnij kreatywność — jeśli łączony bet ma duży sens (i został dostarczony w sugestiach, co świadczy o sprawdzonej matematyce macierzy Poissona) dodaj go zamiast zwyczajnego 1X2, zwłaszcza by zaatakować większe mnożniki.
+
+== POLITYKA "OVER 2.5" I KONTUZJI (PEŁNA ANALIZA) ==
+- SCEPTYCYZM WOBEC OVER 2.5: Wymagaj dowodow na SIŁĘ ATAKU OBU drużyn. Jeśli brakuje informacji lub jedna z drużyn ma słaby atak, ODRZUC Over 2.5. Słaba obrona to nie jest wystarczający powód na Over.
+- KONTUZJE ATAKU: Jeśli topowy strzelec (lub pomocnik ofensywny) nie gra z powodu zawieszenia lub kontuzji — ZAKAZ Over 2.5.
+- NIEKOMPLETNE DANE: Jeśli widzisz ryzyko lub rotację (np. mecze Pucharowe), załóż niższy pułap bramek i odrzuć Over. Typuj Under lub bezpieczne zakłady z wyższym kursem i mniejszym ryzykiem utraty (1X/X2). W skrócie: jak są kontuzje/rotacja w obu drużynach = omijaj z daleka.
 """
 
 
@@ -624,6 +638,28 @@ def _buduj_opis_meczu(w: dict) -> str:
             czesci.append(f"{a[:8]}: {inj_a}")
         linie.append(f"  KONTUZJE: {' | '.join(czesci)}")
 
+    # Absencje Flashscore (Fallback/Dodatkowe)
+    fs_abs_g = w.get("fs_absencje_g")
+    fs_abs_a = w.get("fs_absencje_a")
+    if fs_abs_g or fs_abs_a:
+        czesci_fs = []
+        if fs_abs_g: czesci_fs.append(f"{g[:8]}: {fs_abs_g}")
+        if fs_abs_a: czesci_fs.append(f"{a[:8]}: {fs_abs_a}")
+        linie.append(f"  ABSENCJE_FS: {' | '.join(czesci_fs)}")
+
+    # Sędzia i dyscyplina
+    ref_name = w.get("referee_name")
+    stadium = w.get("stadium")
+    if ref_name or stadium:
+        info_s = []
+        if ref_name:
+            avg_y = w.get("referee_avg_y", 0)
+            sig   = w.get("referee_signal", "NEUTRALNY")
+            info_s.append(f"SĘDZIA: {ref_name} (avg: {avg_y}) [{sig}]")
+        if stadium:
+            info_s.append(f"STADION: {stadium}")
+        linie.append(f"  SĘDZIA/MIEJSCE: {' | '.join(info_s)}")
+
     # Kursy bukmacherskie
     odds = (
         w.get("odds")
@@ -654,6 +690,12 @@ def _buduj_opis_meczu(w: dict) -> str:
             if ev_parts:
                 linie.append(f"  EV(brutto): {' '.join(ev_parts)}")
 
+    # Bet Builder Sugestie ze skorelowanej macierzy matematycznej
+    bb = w.get("bet_builder")
+    if bb and isinstance(bb, list):
+        b_str = ", ".join(bb)
+        linie.append(f"  [bet_builder_sugestie]: {b_str}")
+
     # Scout Bot EV — format quick_picks
     scout = w.get("scout") or {}
     if scout:
@@ -680,7 +722,7 @@ def _buduj_opis_meczu(w: dict) -> str:
     return "\n".join(linie)
 
 
-def _wzbogac_forme(wyniki: list, top_n: int = 5) -> None:
+def _wzbogac_forme(wyniki: list, top_n: int = 12) -> None:
     """
     Etap 4: Próbuje wzbogacić TOP N meczów o formę z SofaScore (Playwright).
     Modyfikuje wyniki in-place, dodając klucze sofa_forma_g/a i sofa_kontuzje_g/a.
