@@ -537,32 +537,21 @@ def main():
     # Ensemble: oblicz roznica_modeli (Poisson vs Bzzoiro) dla każdego kandydata
     _oblicz_roznica_modeli(wyniki)
 
-    # -- Faza draft/final: decision_score pre-filter + enrichment ──────────────
-    if args.faza:
-        _sep(f"DECISION SCORE — faza {args.faza.upper()}")
-        wyniki_przed = len(wyniki)
-        wyniki_filtered = _filtruj_przez_decision_score(wyniki, phase=args.faza)
-        if wyniki_filtered:
-            wyniki = wyniki_filtered
-            console.print(
-                f"[cyan]Decision Score filter [{args.faza}]: "
-                f"{wyniki_przed} → {len(wyniki)} kandydatów "
-                f"(próg {'60' if args.faza == 'final' else '40'})[/cyan]"
-            )
-        else:
-            console.print(
-                f"[yellow]Decision Score: wszyscy poniżej progu — kontynuuję bez filtra "
-                f"(brak pól EV/pewność w kandydatach)[/yellow]"
-            )
+    # -- Pre-filtr kursów: oszczędza tokeny Groq (odrzuca <1.15 i >15.0) ───────
+    n_przed_filter = len(wyniki)
+    wyniki = _pre_filtruj_kursy(wyniki)
+    if len(wyniki) < n_przed_filter:
+        console.print(
+            f"[dim]Pre-filtr kursów (1.15–15.0): "
+            f"{n_przed_filter} → {len(wyniki)} kandydatów[/dim]"
+        )
 
+    # -- Faza draft/final: enrichment składów/sędziego (Decision Score → po Groq) ──
+    if args.faza:
         if args.faza == "final":
             _sep("FAZA FINAL — Składy + Sędzia (API-Football)")
             _enrichuj_finalna_faza(wyniki, os.getenv("APISPORTS_KEY", ""))
-            # Re-score z lineup/referee context
-            wyniki_re = _filtruj_przez_decision_score(wyniki, phase="final")
-            if wyniki_re:
-                wyniki = wyniki_re
-            console.print(f"[cyan]Final re-score: {len(wyniki)} kandydatów po wzbogaceniu[/cyan]")
+            console.print(f"[cyan]Final: {len(wyniki)} kandydatów po wzbogaceniu składów[/cyan]")
 
         if args.faza == "draft":
             _zapisz_next_final_txt(wyniki)
@@ -579,6 +568,10 @@ def main():
 
     # Krok 4b: Dodaj Kelly do kazdej nogi
     _dodaj_kelly(dane, AGENT_BANKROLL)
+
+    # Krok 4c: Decision Score post-Groq — teraz pewnosc_pct i ev_netto są rzeczywiste
+    if args.faza:
+        _ocen_zdarzenia_decision_score(dane, phase=args.faza)
 
     _wyswietl(dane, args.stawka, args.stawka_b)
 
@@ -815,6 +808,64 @@ def _zapisz_next_final_txt(wyniki: list) -> None:
 
 
 # ── Nowe: fazy i decision score ────────────────────────────────────────────
+
+def _pre_filtruj_kursy(kandydaci: list[dict]) -> list[dict]:
+    """
+    Pre-filtr kursów (przed Groq): odrzuca kandydatów bez żadnego kursu w 1.15–15.0.
+    Cel: mniej tokenów do Groq, szybsze i tańsze uruchamianie.
+    Kandydaci bez pola 'odds' (np. z API-Football) są zawsze zachowywani.
+    """
+    MIN_KURS, MAX_KURS = 1.15, 15.0
+    wynik = []
+    for k in kandydaci:
+        odds_dict = k.get("odds") or {}
+        if not odds_dict:
+            wynik.append(k)  # brak danych → zostaw
+            continue
+        wartosci = [v for v in odds_dict.values() if isinstance(v, (int, float)) and v > 0]
+        if any(MIN_KURS <= v <= MAX_KURS for v in wartosci):
+            wynik.append(k)
+    return wynik
+
+
+def _ocen_zdarzenia_decision_score(dane: dict, phase: str = "draft") -> None:
+    """
+    Oblicza Decision Score dla nóg kuponu PO KROKU 3 (Groq).
+    Teraz 'pewnosc_pct' i 'ev_netto' są rzeczywiste — scoring ma sens.
+    Annotuje zdarzenia polem 'decision_score'. Nie usuwa nóg z kuponu.
+    """
+    from footstats.core.decision_score import score_kandydat, PROG_DRAFT, PROG_FINAL
+    threshold = PROG_FINAL if phase == "final" else PROG_DRAFT
+
+    _sep(f"DECISION SCORE — post-Groq [{phase.upper()}] (próg ≥ {threshold})")
+
+    for kupon_key in ("kupon_a", "kupon_b"):
+        zdarzenia = dane.get(kupon_key, {}).get("zdarzenia", [])
+        if not zdarzenia:
+            continue
+        console.print(f"[dim]{kupon_key.upper()}:[/dim]")
+        for z in zdarzenia:
+            pct = z.get("pewnosc_pct") or 50
+            w = {
+                "ev_netto":       z.get("ev_netto", 0),
+                "pewnosc":        pct,   # score_kandydat auto-normalizuje int>1 → /100
+                "czynniki":       z.get("czynniki", []),
+                "roznica_modeli": z.get("roznica_modeli", 0.0),
+                "accuracy":       z.get("accuracy"),
+            }
+            ctx = {
+                "lineup_ok":       z.get("lineup_ok"),
+                "referee_neutral": z.get("referee_neutral", True),
+            }
+            sc, reasons = score_kandydat(w, context=ctx, phase=phase)
+            z["decision_score"] = sc
+            z["decision_reasons"] = reasons
+            ikona = "[green]✅[/green]" if sc >= threshold else "[yellow]⚠️ [/yellow]"
+            console.print(
+                f"  {ikona} {z.get('mecz', '?')} [{z.get('typ', '?')}] "
+                f"score={sc}/{threshold} | pewność={pct}%"
+            )
+
 
 def _decision_score_kandydat(kandydat: dict, phase: str = "draft") -> tuple[int, list[str]]:
     """Wrapper — konwertuje kandydata Bzzoiro → format decision_score."""
