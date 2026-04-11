@@ -1,5 +1,41 @@
 # DECISIONS.md — FootStats Daily Log
 
+---
+
+## 2026-04-11 — Dry-run Draft: mecze do porannego monitorowania
+
+Uruchomiono: `python -m footstats.daily_agent --faza draft --date 2026-04-11 --dry-run --tylko-kupon`
+Bzzoiro zwrócił **47 kandydatów** w oknie 72h.
+
+### KUPON A (stawka 10 PLN | kurs 1.60 | szansa 48.2% | wygrana netto ~14 PLN)
+
+| # | Mecz | Typ | Kurs | Pewność |
+|---|------|-----|------|---------|
+| 1 | Celtic vs St. Mirren | 1 (dom) | 1.18 | 67% |
+| 2 | Coventry City vs Sheffield Wednesday | Over 2.5 | 1.36 | 72% |
+
+### KUPON B (stawka 5 PLN | kurs 1.71 | szansa 56.0% | wygrana netto ~7.50 PLN)
+
+| # | Mecz | Typ | Kurs | Pewność |
+|---|------|-----|------|---------|
+| 1 | Dundee United vs Livingston | 1 (dom) | 1.71 | 56% |
+
+### TOP 3 — wartościowe obserwacje (nie w kuponie)
+
+| # | Mecz | Typ | Kurs | EV% | Uwaga |
+|---|------|-----|------|-----|-------|
+| 1 | Coventry City vs Sheffield Wednesday | 2 (gość) | 18.00 | +168% | Wysoki EV, niska pewność — spekulacja |
+| 2 | RB Leipzig vs Borussia M'gladbach | 2 (gość) | 6.00 | +75% | Umiarkowana pewność |
+| 3 | Cercle Brugge vs RAAL La Louvière | 2 (gość) | 3.75 | +56% | Umiarkowana pewność |
+
+### Decyzje i obserwacje
+
+- Decision Score filter nie zadziałał (brak pól EV/pewność na wyjściu Bzzoiro) — kandydaci nie są pre-filtrowani
+- Faza `final` zaplanowana na **14:20** (czas startu meczu z `next_final.txt`)
+- `--dry-run` nie zapisał do DB ani TXT — kupon wymaga potwierdzenia przed fazą final
+
+[DECISION-2026-04-11-dry-run-flags] Dodano `--date` i `--dry-run` do `daily_agent.py`. Rationale: możliwość podglądu pipeline'u bez efektów ubocznych (DB, TXT, Telegram, Windows toast). Dry-run blokuje dokładnie 4 mutacje stanu, pozostawiając odczyty (Bzzoiro, Groq) aktywne.
+
 ## 2026-04-10
 
 ### Evening Agent — Run 01:36 CEST (UTC 23:36)

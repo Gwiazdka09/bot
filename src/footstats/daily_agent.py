@@ -481,26 +481,40 @@ def main():
         "--faza", choices=["draft", "final"], default=None,
         help="Faza: draft (08:00, bez skladow) lub final (1h przed meczem, ze skladami)"
     )
+    parser.add_argument(
+        "--date", default=None,
+        help="Data YYYY-MM-DD (domyslnie: dzis) — etykieta logów i update_pending"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Tryb podgladu: nie zapisuje do DB, TXT, nie wysyla Telegram/Windows"
+    )
     args = parser.parse_args()
 
     from footstats.config import AGENT_BANKROLL
 
+    date_label = args.date or datetime.now().strftime("%Y-%m-%d")
+    dry_tag    = "  [yellow]⚠ DRY-RUN[/yellow]" if args.dry_run else ""
+
     console.print()
     console.print(Panel(
-        f"[bold]FootStats Daily Agent[/bold]  |  {datetime.now().strftime('%d.%m.%Y %H:%M')}\n"
+        f"[bold]FootStats Daily Agent[/bold]  |  {date_label}{dry_tag}\n"
         f"Horyzont: {args.dni} dni  |  Stawka A: {args.stawka} PLN  |  Stawka B: {args.stawka_b} PLN  |  Bankroll: {AGENT_BANKROLL} PLN",
         border_style="cyan",
     ))
 
-    # Krok 0: Auto-update wynikow pending meczow
+    # Krok 0: Auto-update wynikow pending meczow (pomijamy w dry-run)
     _sep("KROK 0 — Auto-update wynikow")
-    try:
-        from footstats.scrapers.results_updater import update_pending
-        stats_upd = update_pending(days_back=3, dry_run=False, verbose=True)
-        if stats_upd["updated"] > 0:
-            console.print(f"[green]Zaktualizowano {stats_upd['updated']} wynikow w backtest.db[/green]")
-    except Exception as e:
-        console.print(f"[dim]Auto-update wynikow: {e}[/dim]")
+    if args.dry_run:
+        console.print("[yellow]DRY-RUN: pomijam update_pending[/yellow]")
+    else:
+        try:
+            from footstats.scrapers.results_updater import update_pending
+            stats_upd = update_pending(days_back=3, dry_run=False, verbose=True)
+            if stats_upd["updated"] > 0:
+                console.print(f"[green]Zaktualizowano {stats_upd['updated']} wynikow w backtest.db[/green]")
+        except Exception as e:
+            console.print(f"[dim]Auto-update wynikow: {e}[/dim]")
 
     _sep("KROK 1 — Bzzoiro ML")
     wyniki, indeks = _pobierz_kandydatow(dni=args.dni)
@@ -571,11 +585,11 @@ def main():
     if args.waliduj:
         _waliduj_kupon_groq(dane, args.stawka, "kupon_a")
 
-    # -- Faza: zapisz kupon do SQLite DB ───────────────────────────────────────
+    # -- Faza: zapisz kupon do SQLite DB (pomijamy w dry-run) ─────────────────
     cid = None
     draft_legs = []
     draft_odds = 1.0
-    if args.faza:
+    if args.faza and not args.dry_run:
         kupon_a_db = dane.get("kupon_a", {})
         zdarzenia_db = kupon_a_db.get("zdarzenia", [])
         kurs_db = kupon_a_db.get("kurs_laczny", 1.0) or 1.0
@@ -591,11 +605,17 @@ def main():
                 console.print(f"[green]✅ Kupon zapisany do DB — ID: {cid} | faza: {args.faza}[/green]")
                 draft_legs = zdarzenia_db
                 draft_odds = kurs_db
+    elif args.dry_run and args.faza:
+        console.print("[yellow]DRY-RUN: pominięto zapis kuponu do DB[/yellow]")
 
-    # Zapisz do TXT
-    sciezka_txt = _zapisz_txt(dane, args.stawka, args.stawka_b)
+    # Zapisz do TXT (pomijamy w dry-run)
+    if not args.dry_run:
+        sciezka_txt = _zapisz_txt(dane, args.stawka, args.stawka_b)
+    else:
+        console.print("[yellow]DRY-RUN: pominięto zapis TXT[/yellow]")
+        sciezka_txt = None
 
-    # Powiadomienie Windows
+    # Powiadomienie Windows (pomijamy w dry-run)
     kupon_a   = dane.get("kupon_a", {})
     kupon_b   = dane.get("kupon_b", {})
     ile_nog_a = len(kupon_a.get("zdarzenia", []))
@@ -603,25 +623,29 @@ def main():
     kurs_a    = kupon_a.get("kurs_laczny", 0) or 0
     kurs_b    = kupon_b.get("kurs_laczny", 0) or 0
     szansa_a  = kupon_a.get("szansa_wygranej_pct", "?")
-    notif_tekst = (
-        f"A: {ile_nog_a}n @{kurs_a:.2f} ({szansa_a}%) | "
-        f"B: {ile_nog_b}n @{kurs_b:.2f}\n{sciezka_txt.name}"
-    )
-    _powiadomienie_windows("FootStats - gotowy kupon", notif_tekst)
-
-    # Telegram — DRAFT: prosty alert z ID; FINAL/brak: pełny kupon
-    try:
-        from footstats.utils.telegram_notify import (
-            send_kupon, send_draft_kupon, telegram_dostepny,
+    if not args.dry_run and sciezka_txt:
+        notif_tekst = (
+            f"A: {ile_nog_a}n @{kurs_a:.2f} ({szansa_a}%) | "
+            f"B: {ile_nog_b}n @{kurs_b:.2f}\n{sciezka_txt.name}"
         )
-        if telegram_dostepny():
-            if args.faza == "draft" and cid and draft_legs:
-                ok = send_draft_kupon(cid, draft_legs, draft_odds)
-            else:
-                ok = send_kupon(dane, stawka_a=args.stawka, stawka_b=args.stawka_b)
-            console.print(f"[dim]Telegram: {'wyslano' if ok else 'blad wysylki'}[/dim]")
-    except Exception as e:
-        console.print(f"[dim]Telegram niedostepny: {e}[/dim]")
+        _powiadomienie_windows("FootStats - gotowy kupon", notif_tekst)
+
+    # Telegram (pomijamy w dry-run)
+    if not args.dry_run:
+        try:
+            from footstats.utils.telegram_notify import (
+                send_kupon, send_draft_kupon, telegram_dostepny,
+            )
+            if telegram_dostepny():
+                if args.faza == "draft" and cid and draft_legs:
+                    ok = send_draft_kupon(cid, draft_legs, draft_odds)
+                else:
+                    ok = send_kupon(dane, stawka_a=args.stawka, stawka_b=args.stawka_b)
+                console.print(f"[dim]Telegram: {'wyslano' if ok else 'blad wysylki'}[/dim]")
+        except Exception as e:
+            console.print(f"[dim]Telegram niedostepny: {e}[/dim]")
+    else:
+        console.print("[yellow]DRY-RUN: pominięto Telegram[/yellow]")
 
     console.print()
     console.print("[bold green]Gotowe.[/bold green] Powodzenia!\n")
