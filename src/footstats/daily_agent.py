@@ -800,7 +800,7 @@ def _enrichuj_finalna_faza(wyniki: list, api_key: str) -> None:
         
         # Fallback Flashscore (jeśli brak sędziego lub dla topowych kuponów)
         # Pobieramy absencje tylko jeśli mecz jest 'ciekawy' lub jesteśmy w fazie FINAL
-        szukaj_fs = (not k.get("referee_name")) or (args.faza == "final")
+        szukaj_fs = not k.get("referee_name")
         if szukaj_fs:
             fs_data = scrape_match_with_search(k.get("gospodarz"), k.get("goscie"))
             if fs_data.get("success"):
