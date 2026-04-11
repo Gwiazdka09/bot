@@ -16,6 +16,8 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
+from footstats.utils.normalize import normalize_team_name
+
 import requests
 from dotenv import load_dotenv
 from rich.console import Console
@@ -38,8 +40,12 @@ API_BASE = "https://v3.football.api-sports.io"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _norm(s: str) -> str:
-    """Normalizuje nazwę drużyny: lowercase, zamienia non-alphanum na spacje."""
-    return re.sub(r"[^a-z0-9]+", " ", s.lower()).strip()
+    """
+    Normalizuje nazwę drużyny dla fuzzy-matchingu.
+    Deleguje do normalize_team_name: usuwa prefiksy (FC, KS, TSG, al-...),
+    diakrytyki, znaki specjalne i stosuje mappingi z data/team_mappings.json.
+    """
+    return normalize_team_name(s)
 
 
 def _similar(a: str, b: str) -> float:

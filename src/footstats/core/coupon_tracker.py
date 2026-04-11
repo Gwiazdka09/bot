@@ -168,8 +168,9 @@ def get_active_coupons() -> list[sqlite3.Row]:
 def get_draft_today() -> "sqlite3.Row | None":
     """Zwraca dzisiejszy kupon DRAFT (pierwszy znaleziony) lub None."""
     init_coupon_tables()
-    from datetime import date
-    dzis = date.today().isoformat()
+    from datetime import datetime, timezone
+    # SQLite datetime('now') zwraca UTC — porównujemy z datą UTC, nie lokalną
+    dzis = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     def _fn(conn):
         return conn.execute(
