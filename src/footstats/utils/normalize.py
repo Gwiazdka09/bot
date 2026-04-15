@@ -71,17 +71,45 @@ def _remove_prefixes_suffixes(tokens: list[str]) -> list[str]:
     return tokens
 
 
+_DEFAULT_MAPPINGS: dict[str, str] = {
+    "paris saint germain": "psg",
+    "paris sg":            "psg",
+    "psg":                 "psg",
+    "manchester united":   "man utd",
+    "man united":          "man utd",
+    "manchester city":     "man city",
+    "atletico madrid":     "atletico",
+    "inter milan":         "inter",
+    "internazionale":      "inter",
+    "bayer leverkusen":    "leverkusen",
+    "rb leipzig":          "leipzig",
+    "rasenball leipzig":   "leipzig",
+    "wisla plock":         "wisla plock",
+    "ks lechia gdansk":    "lechia gdansk",
+}
+
+
+def _seed_mappings_file() -> None:
+    """Tworzy team_mappings.json z domyślnymi aliasami, jeśli plik nie istnieje."""
+    if _MAPPINGS_PATH.exists():
+        return
+    _MAPPINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _MAPPINGS_PATH.write_text(
+        json.dumps(_DEFAULT_MAPPINGS, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 @lru_cache(maxsize=1)
 def _load_mappings() -> dict[str, str]:
-    """Ładuje team_mappings.json (cached). Zwraca pusty dict jeśli plik nie istnieje."""
+    """Ładuje team_mappings.json (cached). Tworzy plik z defaults jeśli nie istnieje."""
+    _seed_mappings_file()
     try:
-        if _MAPPINGS_PATH.exists():
-            data = json.loads(_MAPPINGS_PATH.read_text(encoding="utf-8"))
-            # Normalizuj klucze mappingów (lowercase bez diakrytyków)
-            return {_strip_diacritics(k).lower(): v.lower() for k, v in data.items()}
+        data = json.loads(_MAPPINGS_PATH.read_text(encoding="utf-8"))
+        # Normalizuj klucze mappingów (lowercase bez diakrytyków)
+        return {_strip_diacritics(k).lower(): v.lower() for k, v in data.items()}
     except (json.JSONDecodeError, OSError):
-        pass
-    return {}
+        return {k: v for k, v in _DEFAULT_MAPPINGS.items()}
 
 
 def normalize_team_name(name: str, use_mappings: bool = True) -> str:

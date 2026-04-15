@@ -39,7 +39,14 @@ playwright install chromium
 
 ## Konfiguracja
 
-Stwórz plik `.env` w katalogu głównym:
+Skopiuj szablon i uzupełnij klucze API:
+
+```bash
+copy env_wzor.txt .env   # Windows
+# cp env_wzor.txt .env   # Linux/Mac
+```
+
+Plik `env_wzor.txt` zawiera wszystkie wymagane zmienne z opisem. Plik `.env` jest w `.gitignore` i nie trafia do repozytorium.
 
 ```plaintext
 FOOTBALL_DATA_KEY=twoj_klucz_football_data_org
@@ -47,6 +54,19 @@ APISPORTS_KEY=twoj_klucz_api_sports_io
 BZZOIRO_KEY=twoj_klucz_bzzoiro
 GROQ_API_KEY=twoj_klucz_groq
 ```
+
+## Automatyczne uruchamianie (Windows Task Scheduler)
+
+Pliki `.bat` w katalogu głównym odpowiadają etapom dziennego pipeline'u:
+
+| Plik | Czas | Opis |
+|------|------|------|
+| `run_daily_agent.bat` | ~08:00 | Faza draft — generuje kupon DRAFT |
+| `run_final_agent.bat` | ~1h przed meczem | Faza final — promuje DRAFT → ACTIVE |
+| `run_evening_agent.bat` | ~23:00 | Rozliczenie wyników kuponów ACTIVE |
+| `run_weekly_report.bat` | Niedziela 20:00 | Raport tygodniowy |
+
+Aby dodać zadanie w Harmonogramie zadań Windows: `taskschd.msc` → Utwórz zadanie podstawowe → Akcja: Uruchom program → podaj pełną ścieżkę do `.bat`.
 
 ## Uruchomienie
 

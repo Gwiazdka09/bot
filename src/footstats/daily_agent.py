@@ -458,13 +458,13 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
 
     for kupon_key in ("kupon_a", "kupon_b"):
         for z in dane.get(kupon_key, {}).get("zdarzenia", []):
-            p     = z.get("pewnosc_pct", 50) / 100.0
-            odds  = z.get("kurs", 1.0)
+            p     = (z.get("pewnosc_pct") or 50) / 100.0
+            odds  = z.get("kurs") or 1.0
             z["kelly_stake"] = kelly_stake(p, odds, bankroll=bankroll)
 
     for row in dane.get("top3", []):
-        p    = row.get("pewnosc_pct", 50) / 100.0
-        odds = row.get("kurs", 1.0)
+        p    = (row.get("pewnosc_pct") or 50) / 100.0
+        odds = row.get("kurs") or 1.0
         row["kelly_stake"] = kelly_stake(p, odds, bankroll)
 
 
@@ -1060,7 +1060,13 @@ def _zapisz_kupon_do_db(
             decision_score=avg_score,
             match_date_first=match_date,
         )
-        
+
+        # Fallback fazy final: save_coupon zawsze tworzy DRAFT — promuj do ACTIVE
+        if cid and phase == "final":
+            from footstats.core.coupon_tracker import update_coupon_status, STATUS_ACTIVE
+            update_coupon_status(cid, STATUS_ACTIVE)
+            console.print(f"[green]Kupon #{cid} → ACTIVE (nowy, faza final)[/green]")
+
         # Zintegrowane odejmowanie z bankrolla
         if cid and stake > 0:
             process_bet(stake, f"Kupon A ID={cid} ({phase})")
