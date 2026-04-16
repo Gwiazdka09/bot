@@ -9,6 +9,9 @@ reportlab>=4.0
 [ai]
 groq>=0.4
 
+[dashboard]
+streamlit>=1.32
+
 [dev]
 pytest>=7.4
 pytest-cov

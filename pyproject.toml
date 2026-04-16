@@ -28,6 +28,9 @@ dev = [
     "pytest>=7.4",
     "pytest-cov",
 ]
+dashboard = [
+    "streamlit>=1.32",
+]
 
 [project.scripts]
 footstats = "footstats.cli:main"

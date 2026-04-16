@@ -1,6 +1,6 @@
 # FootStats — STATUS PROJEKTU
 
-> Jedyne źródło prawdy. Scalony z poprzednich TODO/DECISIONS. Ostatnia aktualizacja: 2026-04-16 (14:25).
+> Jedyne źródło prawdy. Scalony z poprzednich TODO/DECISIONS. Ostatnia aktualizacja: 2026-04-17 (01:35).
 
 ---
 
@@ -41,8 +41,10 @@ F:\bot\
 | Etap | Opis | Commit |
 |------|------|--------|
 | Bugi fix | Kelly crash, DRAFT→ACTIVE, invisible .bat, pdf_font path | `3783099` |
-| Etap 6 | Kalibracja Kelly — hit-rate z ostatnich 10 kuponów (`calibration.py`) | `980d267` |
-| PDF test | Regression test PDF (`tests/test_pdf_minimal.py`) | `980d267` |
+| Etap 6 | Kalibracja Kelly — hit-rate + bot-forma z ostatnich 10 kuponów (`calibration.py`) | `980d267` |
+| Etap 7 | RAG / Pętla Feedbacku AI — `post_match_analyzer.py` + tabela `ai_feedback` | `57a24ca` |
+| Dashboard v1 | Streamlit dashboard (`src/footstats/dashboard.py`) — kupony + wyniki z SQLite | `57a24ca` |
+| PDF test | Regression test PDF (`tests/test_pdf_export.py`) — polskie znaki, 5 testów | `57a24ca` |
 | Przeniesienie plików | assets/, tests/scratch/, usunięcie fbotsrcfootstatsgui/ i scratch/ | `5f15c31` |
 | DejaVuSans font | assets/DejaVuSans.ttf dodany, `_zarejestruj_font()` wywołanie naprawione | `998e51f` |
 
@@ -74,12 +76,30 @@ F:\bot\
 _(brak aktywnych blokerów)_
 
 ### Priorytet ŚREDNI
-- [ ] **Etap 5 (JSON export)** — eksport wyników dla zewnętrznych narzędzi
 - [ ] **BetBuilder Superbet** — Playwright login, scraper SuperSocial, `scrapers/superbet.py`
+- [ ] **Test integracji Telegram** — `tests/test_telegram.py` wysyła testową wiadomość (weryfikacja tokenu i uprawnień bota)
+- [ ] **Weryfikacja harmonogramu** — `docs/scheduler_setup.md` z instrukcją dodania `.bat` do Task Scheduler Windows
+- [x] ~~**Instalacja Streamlit**~~ — **GOTOWE** (`src/footstats/dashboard.py`, uruchom: `python -m streamlit run src/footstats/dashboard.py`)
 
 ### Priorytet NISKI
-- [ ] **Etap 7 (RAG)** — kontekst historyczny meczów w prompcie Groq
+- [ ] **Etap 5 (JSON export)** ← przeniesiony z ŚREDNIEGO (nie blokuje nic)
 - [ ] Audyt i usunięcie `legacy/`
+- [ ] Langfuse LLM Observability (śledzenie tokenów Groq)
+- [x] ~~**Etap 7 (RAG)**~~ — **GOTOWE** (`ai_feedback` → wstrzykiwane w prompt Groq)
+
+---
+
+## Stos technologiczny
+
+| Warstwa | Narzędzie | Uwagi |
+|---------|-----------|-------|
+| LLM | Groq (llama-3.3-70b) | główny model analizy |
+| Scraper | Playwright | login Bzzoiro, BetBuilder |
+| PDF | ReportLab + DejaVuSans | eksport kuponów |
+| DB | SQLite WAL | `data/footstats_backtrack.db` |
+| UI / Web Dashboard | **Streamlit** | wyświetlanie kuponów i wyników z SQLite |
+| LLM Observability | **Langfuse** | śledzenie zapytań Groq i kosztów tokenów (Etap 7) |
+| Scheduler | Windows Task Scheduler + .bat (VBScript) | ciche uruchamianie agentów |
 
 ---
 

@@ -1,8 +1,9 @@
 Metadata-Version: 2.4
 Name: footstats
-Version: 2.7
+Version: 3.0
 Summary: Football statistics and prediction engine (Poisson + ML)
 Requires-Python: >=3.11
+License-File: LICENSE
 Requires-Dist: requests>=2.31
 Requires-Dist: pandas>=2.0
 Requires-Dist: numpy>=1.24
@@ -17,3 +18,6 @@ Requires-Dist: playwright>=1.40; extra == "scraper"
 Provides-Extra: dev
 Requires-Dist: pytest>=7.4; extra == "dev"
 Requires-Dist: pytest-cov; extra == "dev"
+Provides-Extra: dashboard
+Requires-Dist: streamlit>=1.32; extra == "dashboard"
+Dynamic: license-file

@@ -462,14 +462,18 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
     if not isinstance(bankroll, (int, float)) or bankroll <= 0:
         bankroll = AGENT_BANKROLL
 
-    # Etap 6: kalibracja stawki na podstawie hit-rate z ostatnich 10 kuponów
-    multiplier = get_stake_multiplier()
+    # Etap 6: kalibracja stawki (Forma Bota 3 kupony + hit-rate 10 kuponów)
+    multiplier = get_stake_multiplier()  # łączy oba sygnały
     cal = calibration_summary()
     if cal.get("n", 0) > 0:
+        forma_info = f" | Forma3: {cal.get('forma_multiplier', 1.0)}x ({cal.get('forma_note', '')})"
         console.print(
             f"[dim]Kalibracja: hit={cal['hit_rate']:.0%} ({cal['won']}/{cal['n']}) "
-            f"→ multiplier={multiplier}x — {cal['note']}[/dim]"
+            f"→ multiplier={multiplier}x — {cal['note']}{forma_info}[/dim]"
         )
+    # Zabezpieczenie: multiplier nigdy None
+    if not isinstance(multiplier, (int, float)) or multiplier <= 0:
+        multiplier = 1.0
     effective_bankroll = bankroll * multiplier
 
     for kupon_key in ("kupon_a", "kupon_b"):
