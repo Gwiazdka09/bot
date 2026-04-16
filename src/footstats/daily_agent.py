@@ -453,19 +453,30 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
     """Dodaje kelly_stake do każdego zdarzenia w kuponach i top3."""
     try:
         from footstats.core.kelly import kelly_stake
+        from footstats.config import AGENT_BANKROLL
     except ImportError:
         return
 
+    # Guard: bankroll musi być dodatnią liczbą — DB może zwrócić None
+    if not isinstance(bankroll, (int, float)) or bankroll <= 0:
+        bankroll = AGENT_BANKROLL
+
     for kupon_key in ("kupon_a", "kupon_b"):
         for z in dane.get(kupon_key, {}).get("zdarzenia", []):
-            p     = (z.get("pewnosc_pct") or 50) / 100.0
-            odds  = z.get("kurs") or 1.0
-            z["kelly_stake"] = kelly_stake(p, odds, bankroll=bankroll)
+            p    = (z.get("pewnosc_pct") or 50) / 100.0
+            odds = z.get("kurs") or 1.0
+            try:
+                z["kelly_stake"] = kelly_stake(p, odds, bankroll=bankroll)
+            except (TypeError, ZeroDivisionError):
+                z["kelly_stake"] = 1.0
 
     for row in dane.get("top3", []):
         p    = (row.get("pewnosc_pct") or 50) / 100.0
         odds = row.get("kurs") or 1.0
-        row["kelly_stake"] = kelly_stake(p, odds, bankroll)
+        try:
+            row["kelly_stake"] = kelly_stake(p, odds, bankroll)
+        except (TypeError, ZeroDivisionError):
+            row["kelly_stake"] = 1.0
 
 
 # ── Krok 6: Walidacja Groq ────────────────────────────────────────────────────
@@ -1038,17 +1049,23 @@ def _zapisz_kupon_do_db(
         if phase == "final":
             draft_row = get_draft_today()
             if draft_row:
-                promote_to_active(
-                    coupon_id=draft_row["id"],
-                    legs=legs,
-                    groq_reasoning=groq_resp or "",
-                    decision_score=avg_score,
-                    total_odds=round(total_odds, 2),
-                )
-                console.print(f"[green]Kupon #{draft_row['id']} DRAFT → ACTIVE[/green]")
-                return draft_row["id"]
-            # brak DRAFT z dzisiaj — utwórz nowy jako ACTIVE
-            console.print("[yellow]Brak dzisiejszego DRAFT — tworzę nowy kupon ACTIVE[/yellow]")
+                try:
+                    promote_to_active(
+                        coupon_id=draft_row["id"],
+                        legs=legs,
+                        groq_reasoning=groq_resp or "",
+                        decision_score=avg_score,
+                        total_odds=round(total_odds, 2),
+                    )
+                    console.print(f"[green]Kupon #{draft_row['id']} DRAFT → ACTIVE[/green]")
+                    return draft_row["id"]
+                except Exception as promo_err:
+                    console.print(
+                        f"[red]BŁĄD promote_to_active(#{draft_row['id']}): {promo_err}"
+                        f" — tworzę nowy kupon ACTIVE jako fallback[/red]"
+                    )
+            else:
+                console.print("[yellow]Brak dzisiejszego DRAFT — tworzę nowy kupon ACTIVE[/yellow]")
 
         cid = save_coupon(
             phase=phase,
@@ -1061,19 +1078,20 @@ def _zapisz_kupon_do_db(
             match_date_first=match_date,
         )
 
-        # Fallback fazy final: save_coupon zawsze tworzy DRAFT — promuj do ACTIVE
+        # Faza final: save_coupon tworzy DRAFT — od razu promuj do ACTIVE
         if cid and phase == "final":
             from footstats.core.coupon_tracker import update_coupon_status, STATUS_ACTIVE
             update_coupon_status(cid, STATUS_ACTIVE)
-            console.print(f"[green]Kupon #{cid} → ACTIVE (nowy, faza final)[/green]")
+            console.print(f"[green]Kupon #{cid} → ACTIVE[/green]")
 
-        # Zintegrowane odejmowanie z bankrolla
         if cid and stake > 0:
             process_bet(stake, f"Kupon A ID={cid} ({phase})")
-            
+
         return cid
     except Exception as e:
-        console.print(f"[yellow]Warning: Nie udało się zapisać kuponu do DB: {e}[/yellow]")
+        import traceback
+        console.print(f"[red]BŁĄD _zapisz_kupon_do_db [{phase}]: {e}[/red]")
+        console.print(f"[dim]{traceback.format_exc()}[/dim]")
         return None
 
 

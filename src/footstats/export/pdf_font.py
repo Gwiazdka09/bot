@@ -7,7 +7,8 @@ from reportlab.pdfbase.ttfonts import TTFont
 # ================================================================
 
 _FONT_PATHS = [
-    Path(__file__).parent.parent.parent.parent / "DejaVuSans.ttf",
+    Path(__file__).parent.parent.parent.parent / "assets" / "DejaVuSans.ttf",
+    Path(__file__).parent.parent.parent.parent / "DejaVuSans.ttf",  # legacy (root)
     Path(r"C:\Windows\Fonts\DejaVuSans.ttf"),
     Path(r"C:\Windows\Fonts\dejavusans.ttf"),
     Path.home() / "DejaVuSans.ttf",
