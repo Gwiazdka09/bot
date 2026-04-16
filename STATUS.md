@@ -43,7 +43,8 @@ F:\bot\
 | Bugi fix | Kelly crash, DRAFT→ACTIVE, invisible .bat, pdf_font path | `3783099` |
 | Etap 6 | Kalibracja Kelly — hit-rate z ostatnich 10 kuponów (`calibration.py`) | `980d267` |
 | PDF test | Regression test PDF (`tests/test_pdf_minimal.py`) | `980d267` |
-| Przeniesienie plików | assets/, tests/scratch/, usunięcie fbotsrcfootstatsgui/ i scratch/ | ręcznie |
+| Przeniesienie plików | assets/, tests/scratch/, usunięcie fbotsrcfootstatsgui/ i scratch/ | `5f15c31` |
+| DejaVuSans font | assets/DejaVuSans.ttf dodany, `_zarejestruj_font()` wywołanie naprawione | `998e51f` |
 
 ---
 
@@ -70,9 +71,7 @@ F:\bot\
 ## TODO — aktywne
 
 ### Priorytet WYSOKI
-- [ ] Weryfikacja `run_final_agent.bat` — sprawdź logi czy okno czasowe działa poprawnie po restarcie (`logs/final_agent.log`)
-- [ ] Commit przeniesionych plików — `git add -A && git commit -m "chore: reorganizacja plików"` (pliki przeniesione ręcznie, niezcommitowane)
-- [ ] Zakup DejaVuSans.ttf i umieszczenie w `assets/` — PDF test pomija font (Helvetica fallback aktywny)
+_(brak aktywnych blokerów)_
 
 ### Priorytet ŚREDNI
 - [ ] **Etap 5 (JSON export)** — eksport wyników dla zewnętrznych narzędzi
