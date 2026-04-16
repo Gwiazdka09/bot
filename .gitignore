@@ -69,3 +69,4 @@ superbet_error.png
 logs/
 *.png
 .aider*
+!assets/DejaVuSans.ttf

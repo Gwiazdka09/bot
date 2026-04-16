@@ -31,6 +31,8 @@ def _zarejestruj_font():
                 pass
     return False
 
+_zarejestruj_font()
+
 def _pdf(tekst: str) -> str:
     if FONT_OK:
         return str(tekst)
