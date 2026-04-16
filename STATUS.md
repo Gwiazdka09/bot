@@ -1,6 +1,6 @@
 # FootStats — STATUS PROJEKTU
 
-> Jedyne źródło prawdy. Scalony z poprzednich TODO/DECISIONS. Ostatnia aktualizacja: 2026-04-16.
+> Jedyne źródło prawdy. Scalony z poprzednich TODO/DECISIONS. Ostatnia aktualizacja: 2026-04-16 (14:25).
 
 ---
 
@@ -34,17 +34,16 @@ F:\bot\
 └── .env                    ← sekrety (nie w git)
 ```
 
-**Pliki do przeniesienia ręcznie (operacje mv/rm):**
-```bash
-mkdir assets
-mv DejaVuSans.ttf assets/
-mv test_ai_integration.py tests/
-mv test_footstats.py tests/
-mkdir tests/scratch
-mv scratch/check_db.py scratch/test_fs_search.py scratch/test_fs_interactive.py tests/scratch/
-rm -rf fbotsrcfootstatsgui/ dejavu-sans-ttf-2.37/ scratch/ MD/
-rm scratch_ref_content.html
-```
+---
+
+## Zrealizowane etapy
+
+| Etap | Opis | Commit |
+|------|------|--------|
+| Bugi fix | Kelly crash, DRAFT→ACTIVE, invisible .bat, pdf_font path | `3783099` |
+| Etap 6 | Kalibracja Kelly — hit-rate z ostatnich 10 kuponów (`calibration.py`) | `980d267` |
+| PDF test | Regression test PDF (`tests/test_pdf_minimal.py`) | `980d267` |
+| Przeniesienie plików | assets/, tests/scratch/, usunięcie fbotsrcfootstatsgui/ i scratch/ | ręcznie |
 
 ---
 
@@ -71,13 +70,12 @@ rm scratch_ref_content.html
 ## TODO — aktywne
 
 ### Priorytet WYSOKI
-- [ ] Przeniesienie plików (mv/rm) — do zrobienia ręcznie (komendy wyżej)
-- [ ] Weryfikacja że `run_final_agent.bat` poprawnie sprawdza okno czasowe po restarcie z `-silent`
-- [ ] Test regresji: PDF z `assets/DejaVuSans.ttf` (po przeniesieniu fontu)
+- [ ] Weryfikacja `run_final_agent.bat` — sprawdź logi czy okno czasowe działa poprawnie po restarcie (`logs/final_agent.log`)
+- [ ] Commit przeniesionych plików — `git add -A && git commit -m "chore: reorganizacja plików"` (pliki przeniesione ręcznie, niezcommitowane)
+- [ ] Zakup DejaVuSans.ttf i umieszczenie w `assets/` — PDF test pomija font (Helvetica fallback aktywny)
 
 ### Priorytet ŚREDNI
 - [ ] **Etap 5 (JSON export)** — eksport wyników dla zewnętrznych narzędzi
-- [ ] **Etap 6 (Backtest kalibracja)** — walk-forward na `df_wyk`, progi 95%=mocny/80%=słaby, kalibracja Groq
 - [ ] **BetBuilder Superbet** — Playwright login, scraper SuperSocial, `scrapers/superbet.py`
 
 ### Priorytet NISKI
