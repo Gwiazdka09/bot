@@ -1,65 +1,106 @@
-# FootStats — STATUS
+# FootStats — STATUS PROJEKTU
 
-_Ostatnia aktualizacja: 2026-04-16_
-
----
-
-## Zrobione
-
-- [x] Refaktor src-layout v3.0 — pełny pakiet `src/footstats/`
-- [x] `normalize_team_name` w `utils/normalize.py` — 25 testów, 25/25 pass
-- [x] `evening_agent.py` — deleguje `_norm()` do `normalize_team_name`
-- [x] `data/team_mappings.json` — auto-seeding defaults (PSG, Man Utd, Inter itp.)
-- [x] `--dry-run` i `--date` w `daily_agent.py` — blokuje 4 efekty uboczne
-- [x] `coupon_tracker.py` — `get_draft_today`, `promote_to_active`
-- [x] **Kelly None fix** — `(z.get("pewnosc_pct") or 50) / 100.0` we wszystkich miejscach `_dodaj_kelly`
-- [x] **DRAFT→ACTIVE fix** — fallback w `_zapisz_kupon_do_db` wywołuje `update_coupon_status(ACTIVE)` gdy `phase == "final"`
-- [x] Pipeline AI (Etapy 1–4): Bzzoiro → forma → Groq → weryfikacja kursów → DB
-- [x] Evening agent v2: API-Football fuzzy-match → update statusów kuponów
-- [x] Testy: 59/59 pass (ogółem)
+> Jedyne źródło prawdy. Scalony z poprzednich TODO/DECISIONS. Ostatnia aktualizacja: 2026-04-16.
 
 ---
 
-## W toku (Sprint)
+## Struktura projektu (docelowa)
 
-- [ ] **Decision Score filter** — przenieść po Groq lub liczyć z `pw`+kurs Bzzoiro pre-Groq
-  - Aktualnie: brak `ev_netto`/`pewnosc_pct` na wyjściu Bzzoiro → filter nie działa pre-Groq
-- [ ] **Faza final workflow** — uruchamiać `daily_agent --faza final` przed meczami (docelowo przez Task Scheduler)
-- [ ] **`team_mappings.json`** — rozbudować o typowe błędy API-Football (np. "Man Utd" vs "Manchester United")
-- [ ] **BetBuilder Superbet** — czeka na Playwright login z `.env` (`SUPERBET_USER`, `SUPERBET_PASS`)
+```
+F:\bot\
+├── src/footstats/          ← główny pakiet Python
+│   ├── ai/                 ← klient Groq, RAG, trainer, analyzer
+│   ├── core/               ← Kelly, Poisson, backtest, decyzje, kupony
+│   ├── scrapers/           ← Bzzoiro, STS, FlashScore, lineup, sędziowie
+│   ├── utils/              ← normalize, cache, logging, Telegram
+│   ├── export/             ← PDF, tabele
+│   ├── data/               ← historical_loader
+│   ├── api/                ← FastAPI main.py
+│   ├── gui/                ← React/Vite frontend
+│   ├── daily_agent.py      ← główny agent (draft/final)
+│   ├── evening_agent.py    ← agent wieczorny
+│   ├── weekly_report.py    ← raport tygodniowy
+│   ├── cli.py              ← CLI interface
+│   └── config.py
+├── tests/                  ← pytest (test_*.py)
+│   └── scratch/            ← skrypty debugowe (check_db.py etc.)
+├── assets/                 ← czcionki (DejaVuSans.ttf)
+├── data/                   ← baza SQLite, parquet, JSON
+├── logs/                   ← logi agentów
+├── docs/                   ← dokumentacja
+├── legacy/                 ← stare wersje (tylko archiwum)
+├── dashboard.py            ← UI (punkt wejścia, zostaje w root)
+├── run_*.bat               ← launche Task Scheduler (ukryte przez VBScript)
+└── .env                    ← sekrety (nie w git)
+```
+
+**Pliki do przeniesienia ręcznie (operacje mv/rm):**
+```bash
+mkdir assets
+mv DejaVuSans.ttf assets/
+mv test_ai_integration.py tests/
+mv test_footstats.py tests/
+mkdir tests/scratch
+mv scratch/check_db.py scratch/test_fs_search.py scratch/test_fs_interactive.py tests/scratch/
+rm -rf fbotsrcfootstatsgui/ dejavu-sans-ttf-2.37/ scratch/ MD/
+rm scratch_ref_content.html
+```
 
 ---
 
-## Zablokowane
+## Naprawione bugi (commit 3783099 — 2026-04-16)
 
-- **BetBuilder Superbet** — wymaga konfiguracji `.env` z danymi logowania Superbet
-- **Etap 6 (backtest kalibracja)** — walk-forward na `df_wyk`, progi 95%=mocny / 80%=słaby → brak planu implementacji
-- **Etap 7 (RAG)** — ładowanie historycznych lekcji Groq do kontekstu → nierozpoczęte
+| # | Problem | Status | Gdzie |
+|---|---------|--------|-------|
+| 1 | Kelly TypeError (bankroll=None crash) | ✅ NAPRAWIONY | `daily_agent._dodaj_kelly` |
+| 2 | DRAFT→ACTIVE (kupon utknie w DRAFT) | ✅ NAPRAWIONY | `daily_agent._zapisz_kupon_do_db` |
+| 3 | team_mappings.json seeding | ✅ DZIAŁA | `utils/normalize._load_mappings` |
+| 4 | Okna cmd.exe wyskakują co 30 min | ✅ NAPRAWIONY | wszystkie `run_*.bat` |
+| 5 | pdf_font.py ścieżka do fontu | ✅ NAPRAWIONY | `export/pdf_font.py` |
+
+### Szczegóły napraw
+
+**Kelly (1):** `_dodaj_kelly` ma teraz guard `if not isinstance(bankroll, (int, float)) or bankroll <= 0: bankroll = AGENT_BANKROLL` oraz `try/except (TypeError, ZeroDivisionError)` wokół każdego wywołania → fallback 1.0 PLN zamiast crashu.
+
+**DRAFT→ACTIVE (2):** `promote_to_active` wyizolowane w własnym `try/except`. Brakujący `else` dodany (komunikat "Brak DRAFT" wychodził nawet gdy DRAFT był znaleziony). Outer `except` teraz loguje pełny traceback zamiast cichego warning.
+
+**Invisible .bat (4):** Każdy `.bat` tworzy tymczasowy `.vbs` w `%TEMP%`, który odpala siebie z flagą `-silent` i window-style=0. `wscript` jest bezokienkowy — żadne czarne okno nie wyskakuje z Task Schedulera.
 
 ---
 
-## Log Decyzji
+## TODO — aktywne
 
-### [DECISION-2026-04-16-kelly-none-fix]
-`(z.get("pewnosc_pct") or 50)` zamiast `z.get("pewnosc_pct", 50)`.
-Rationale: `.get(key, default)` nie chroni gdy klucz istnieje z wartością `None` — `None / 100.0` rzucał TypeError połykanym przez `except Exception`.
+### Priorytet WYSOKI
+- [ ] Przeniesienie plików (mv/rm) — do zrobienia ręcznie (komendy wyżej)
+- [ ] Weryfikacja że `run_final_agent.bat` poprawnie sprawdza okno czasowe po restarcie z `-silent`
+- [ ] Test regresji: PDF z `assets/DejaVuSans.ttf` (po przeniesieniu fontu)
 
-### [DECISION-2026-04-16-draft-active-fallback]
-`_zapisz_kupon_do_db` z `phase="final"` wywołuje `update_coupon_status(cid, ACTIVE)` po `save_coupon()`.
-Rationale: `save_coupon` zawsze tworzy `status=DRAFT`; bez tego kroku evening_agent nie rozliczał kuponów z fazy final.
+### Priorytet ŚREDNI
+- [ ] **Etap 5 (JSON export)** — eksport wyników dla zewnętrznych narzędzi
+- [ ] **Etap 6 (Backtest kalibracja)** — walk-forward na `df_wyk`, progi 95%=mocny/80%=słaby, kalibracja Groq
+- [ ] **BetBuilder Superbet** — Playwright login, scraper SuperSocial, `scrapers/superbet.py`
 
-### [DECISION-2026-04-16-team-mappings-seeding]
-`_seed_mappings_file()` tworzy `data/team_mappings.json` z 13 domyślnymi aliasami jeśli plik nie istnieje.
-Rationale: plik jest w `.gitignore`; nowa instalacja nie miała mappingów i normalize działał bez aliasów.
+### Priorytet NISKI
+- [ ] **Etap 7 (RAG)** — kontekst historyczny meczów w prompcie Groq
+- [ ] Audyt i usunięcie `legacy/`
 
-### [DECISION-2026-04-11-dry-run-flags]
-`--date` i `--dry-run` w `daily_agent.py` blokują 4 efekty uboczne (DB, TXT, Telegram, Windows toast).
-Rationale: bezpieczny podgląd pipeline'u bez mutacji stanu.
+---
 
-### [DECISION-2026-04-11-normalize]
-`normalize_team_name` w `utils/normalize.py` z `@lru_cache` na JSON mappings.
-`evening_agent._norm()` deleguje do tej funkcji — single source of truth.
+## Architektura — kluczowe decyzje
 
-### [DECISION-2026-04-11-decision-score-timing]
-Decision Score filter nie zadziałał pre-Groq (brak `ev_netto`/`pewnosc_pct` na wyjściu Bzzoiro).
-TODO: przenieść po Groq lub liczyć z `pw`+kurs.
+| Decyzja | Powód |
+|---------|-------|
+| `src-layout` v3.0 | Izolacja pakietu, działa z `python -m footstats.*` |
+| SQLite WAL | Brak blokad na Windows przy wieloprocesowym dostępie |
+| Fractional Kelly ÷3 | Konserwatywne zarządzanie bankrollem |
+| Bzzoiro jako anchor kursu | ~8-9% wyżej niż STS, timezone UTC+4, podatek 12% flat |
+| Flat betting 5-10 PLN, kotwica <1.35 | Over lambda>2.8, iteracyjnie kalibrowane |
+| Task Scheduler co 30 min (final) | Elastyczne okno [-35, +5] min od `next_final.txt` |
+| VBScript trick w .bat | Ukryte okna bez zmiany konfiguracji Task Scheduler |
+
+---
+
+## Znane ograniczenia
+
+- **Timezone edge case**: `get_draft_today()` porównuje UTC daty. Przy DRAFT po 22:00 CEST i FINAL po północy UTC — mogą się minąć o dzień. Ryzyko praktyczne minimalne (draft 08:00, final 16:00).
+- **Bzzoiro ML cache bug** — niezidentyfikowany problem w `scrapers/bzzoiro.py`, nie powoduje crashu, niska priorytet.
