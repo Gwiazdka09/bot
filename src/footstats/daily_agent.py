@@ -454,6 +454,7 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
     try:
         from footstats.core.kelly import kelly_stake
         from footstats.config import AGENT_BANKROLL
+        from footstats.core.calibration import get_stake_multiplier, calibration_summary
     except ImportError:
         return
 
@@ -461,12 +462,22 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
     if not isinstance(bankroll, (int, float)) or bankroll <= 0:
         bankroll = AGENT_BANKROLL
 
+    # Etap 6: kalibracja stawki na podstawie hit-rate z ostatnich 10 kuponów
+    multiplier = get_stake_multiplier()
+    cal = calibration_summary()
+    if cal.get("n", 0) > 0:
+        console.print(
+            f"[dim]Kalibracja: hit={cal['hit_rate']:.0%} ({cal['won']}/{cal['n']}) "
+            f"→ multiplier={multiplier}x — {cal['note']}[/dim]"
+        )
+    effective_bankroll = bankroll * multiplier
+
     for kupon_key in ("kupon_a", "kupon_b"):
         for z in dane.get(kupon_key, {}).get("zdarzenia", []):
             p    = (z.get("pewnosc_pct") or 50) / 100.0
             odds = z.get("kurs") or 1.0
             try:
-                z["kelly_stake"] = kelly_stake(p, odds, bankroll=bankroll)
+                z["kelly_stake"] = kelly_stake(p, odds, bankroll=effective_bankroll)
             except (TypeError, ZeroDivisionError):
                 z["kelly_stake"] = 1.0
 
@@ -474,7 +485,7 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
         p    = (row.get("pewnosc_pct") or 50) / 100.0
         odds = row.get("kurs") or 1.0
         try:
-            row["kelly_stake"] = kelly_stake(p, odds, bankroll)
+            row["kelly_stake"] = kelly_stake(p, odds, effective_bankroll)
         except (TypeError, ZeroDivisionError):
             row["kelly_stake"] = 1.0
 
