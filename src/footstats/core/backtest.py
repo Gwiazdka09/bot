@@ -81,6 +81,19 @@ def init_db() -> None:
         except sqlite3.OperationalError:
             pass  # kolumna już istnieje
 
+        # Tabela feedbacku AI (analiza porażek)
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS ai_feedback (
+                id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+                match_id            INTEGER NOT NULL REFERENCES predictions(id),
+                prediction_details  TEXT    NOT NULL DEFAULT '{}',
+                reason_for_failure  TEXT    NOT NULL DEFAULT '',
+                created_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_ai_feedback_match ON ai_feedback(match_id);
+            CREATE INDEX IF NOT EXISTS idx_ai_feedback_date  ON ai_feedback(created_at);
+        """)
+
 
 # ── Logika tip_correct ────────────────────────────────────────────────────
 

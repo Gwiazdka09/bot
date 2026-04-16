@@ -981,6 +981,19 @@ def ai_analiza_pewniaczki(
     except Exception:
         pass
 
+    feedback_str = ""
+    try:
+        from footstats.ai.post_match_analyzer import pobierz_ostatnie_wnioski
+        wnioski = pobierz_ostatnie_wnioski(3)
+        if wnioski:
+            feedback_str = (
+                "WNIOSKI Z OSTATNICH PORAŻEK (Pętla Feedbacku — ucz się błędów):\n"
+                + "\n".join(f"  • {w}" for w in wnioski)
+                + "\n"
+            )
+    except Exception:
+        pass
+
     mecze_opisy = [_buduj_opis_meczu(w) for w in wyniki[:20]]
 
     prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami na najbliższe 72h.
@@ -988,7 +1001,7 @@ Mecze [metoda:POISSON] mają pełną analizę czynnikową. Mecze [metoda:ML] to 
 
 KONTEKST ZBIORU:
 {sygnaly}
-{kalibracja_str}
+{kalibracja_str}{feedback_str}
 PODATEK: 12% zryczałtowany. Wzór netto: stawka × kurs_łączny × 0.88
 EV(brutto) w danych jest PRZED podatkiem — po podatku realny zysk jest o ~12% niższy.
 

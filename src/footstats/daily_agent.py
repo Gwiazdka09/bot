@@ -560,6 +560,17 @@ def main():
         except Exception as e:
             console.print(f"[dim]Auto-update wynikow: {e}[/dim]")
 
+        # Krok 0b: Analiza porażek AI (Pętla Feedbacku) — uruchamiana po update wyników
+        try:
+            from footstats.ai.post_match_analyzer import analizuj_porazki
+            stats_fb = analizuj_porazki(days_back=14, dry_run=False)
+            if stats_fb["analyzed"] > 0:
+                console.print(
+                    f"[dim]Pętla Feedbacku: przeanalizowano {stats_fb['analyzed']} porażek[/dim]"
+                )
+        except Exception as e:
+            console.print(f"[dim]Analiza porażek (feedback): {e}[/dim]")
+
     _sep("KROK 1 — Bzzoiro ML")
     wyniki, indeks = _pobierz_kandydatow(dni=args.dni)
 

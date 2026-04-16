@@ -15,6 +15,7 @@ import re
 import sys
 import time
 import logging
+import unicodedata
 from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from dotenv import load_dotenv
@@ -27,33 +28,97 @@ log = logging.getLogger(__name__)
 API_BASE    = "https://v3.football.api-sports.io"
 API_KEY_ENV = "APISPORTS_KEY"
 
-# Ligi do sprawdzania w API-Football (id → kod wewnętrzny)
+# Ligi do sprawdzania w API-Football (id → czytelna nazwa)
 _LIGI_IDS = {
-    39:  "ENG-Premier League",
-    78:  "GER-Bundesliga",
-    135: "ITA-Serie A",
-    140: "ESP-La Liga",
-    61:  "FRA-Ligue 1",
-    88:  "NED-Eredivisie",
-    106: "POL-Ekstraklasa",
-    94:  "POR-Primeira Liga",
-    2:   "UEFA-Champions League",
-    3:   "UEFA-Europa League",
+    # Główne europejskie
+    39:  "Premier League",
+    40:  "Championship",
+    78:  "Bundesliga",
+    135: "Serie A",
+    140: "La Liga",
+    61:  "Ligue 1",
+    88:  "Eredivisie",
+    106: "Ekstraklasa",
+    94:  "Primeira Liga",
+    144: "Pro League",          # Belgia
+    119: "Superliga",           # Dania
+    179: "Scottish Premiership",
+    197: "Super League",        # Grecja (Stoiximan Super League)
+    203: "Super Lig",           # Turcja
+    218: "Allsvenskan",         # Szwecja
+    103: "Eliteserien",         # Norwegia
+    113: "Veikkausliiga",       # Finlandia
+    271: "Fortuna Liga",        # Czechy
+    345: "SuperLiga",           # Serbia
+    # Europejskie puchary
+    2:   "Champions League",
+    3:   "Europa League",
+    848: "Conference League",
+    # Ameryki
+    13:  "Copa Libertadores",
+    11:  "Copa Sudamericana",
+    253: "MLS",
+    71:  "Serie A",             # Brazylia — kolizja z ITA, obsługiwana przez fuzzy
+    # Azja / Bliski Wschód
+    307: "Saudi Pro League",
+    # Afryka
+    332: "NPFL",                # Nigeria Premier Football League
+    # Bałkany / Europa Wschodnia
+    172: "Parva Liga",          # Bułgaria
 }
 
-# Odwrotne mapowanie: nazwa ligi → id API
-_NAZWA_DO_ID = {v: k for k, v in _LIGI_IDS.items()}
+# Aliasy: alternatywne nazwy z DB → znormalizowana nazwa do fuzzy-match
+_ALIASY: dict[str, str] = {
+    "stoiximan super league": "super league",
+    "trendyol super lig":     "super lig",
+    "nigeria premier football league": "npfl",
+    "europa league":          "europa league",
+    "champions league":       "champions league",
+    "conference league":      "conference league",
+}
 
 
 def _get_api_key() -> str | None:
     return (os.getenv(API_KEY_ENV) or "").strip() or None
 
 
+def _norm(s: str) -> str:
+    """Normalizuje tekst: Unicode → ASCII, lowercase, tylko alfanumeryczne."""
+    s = unicodedata.normalize("NFKD", s)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+
 def _similar(a: str, b: str) -> float:
-    """Podobieństwo nazw (0–1). Porównuje lowercase bez znaków specjalnych."""
-    def _norm(s):
-        return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+    """Podobieństwo nazw (0–1). Obsługuje akcenty i skróty."""
     return SequenceMatcher(None, _norm(a), _norm(b)).ratio()
+
+
+def _liga_ids_dla_nazwy(league_str: str) -> list[int]:
+    """
+    Zwraca listę league_id do sprawdzenia dla danej nazwy ligi z DB.
+    Używa fuzzy-match zamiast exact-match aby obsłużyć warianty nazw.
+    """
+    if not league_str:
+        return list(_LIGI_IDS.keys())
+
+    # Spróbuj alias
+    normalized = _ALIASY.get(_norm(league_str), _norm(league_str))
+
+    # Szukaj najlepszego dopasowania wśród znanych lig
+    best_id: int | None = None
+    best_score = 0.0
+    for lid, lname in _LIGI_IDS.items():
+        score = _similar(normalized, lname)
+        if score > best_score:
+            best_score = score
+            best_id = lid
+
+    if best_id is not None and best_score >= 0.55:
+        return [best_id]
+    # Nieznana liga — przeszukaj wszystkie
+    log.debug("Nieznana liga '%s' (best=%.2f) — szukam we wszystkich", league_str, best_score)
+    return list(_LIGI_IDS.keys())
 
 
 def _fetch_fixtures(api_key: str, league_id: int, date_str: str) -> list[dict]:
@@ -167,13 +232,8 @@ def update_pending(
         match_date = p["match_date"][:10]
         league_str = p.get("league", "")
 
-        # Spróbuj znaleźć league_id na podstawie nazwy ligi
-        league_ids_to_try = []
-        if league_str in _NAZWA_DO_ID:
-            league_ids_to_try = [_NAZWA_DO_ID[league_str]]
-        else:
-            # Jeśli nie znamy ligi — szukaj we wszystkich
-            league_ids_to_try = list(_LIGI_IDS.keys())
+        # Fuzzy-dopasowanie nazwy ligi do listy API-Football
+        league_ids_to_try = _liga_ids_dla_nazwy(league_str)
 
         wynik_found = None
 
