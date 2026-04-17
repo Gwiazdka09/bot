@@ -10,6 +10,7 @@ Użycie:
     python -m footstats.scrapers.results_updater --dni 3  # cofnij się 3 dni
 """
 
+import json
 import os
 import re
 import sys
@@ -291,6 +292,153 @@ def update_pending(
     return stats
 
 
+def update_active_coupons(
+    days_back: int = 3,
+    dry_run: bool = False,
+    verbose: bool = True,
+) -> dict:
+    """
+    Zamyka ACTIVE kupony w tabeli coupons po zakończeniu meczów.
+
+    Dla każdego kuponu:
+      - pobiera wynik każdego leg'a z API-Football
+      - ocenia tip (WIN/LOSE) używając tej samej logiki co backtest.py
+      - jeśli WSZYSTKIE nogi ocenione → ustawia WIN lub LOSE
+      - aktualizuje bankroll_state i bankroll_history przy WIN
+    """
+    api_key = _get_api_key()
+    if not api_key:
+        print("[CouponUpdater] Brak APISPORTS_KEY — pomijam aktualizację kuponów.")
+        return {"closed": 0, "partial": 0, "errors": 0}
+
+    from footstats.core.backtest import _connect, _oblicz_tip_correct, init_db
+    init_db()
+
+    today = datetime.now().date()
+    cutoff = today - timedelta(days=days_back)
+
+    with _connect() as conn:
+        rows = conn.execute(
+            """SELECT id, legs_json, total_odds, stake_pln, match_date_first
+               FROM coupons
+               WHERE status = 'ACTIVE'
+               AND match_date_first < ?""",
+            (today.isoformat(),)
+        ).fetchall()
+
+    if not rows:
+        if verbose:
+            print("[CouponUpdater] Brak aktywnych kuponów do rozliczenia.")
+        return {"closed": 0, "partial": 0, "errors": 0}
+
+    if verbose:
+        print(f"[CouponUpdater] Aktywnych kuponów do sprawdzenia: {len(rows)}")
+
+    fixtures_cache: dict[tuple, list] = {}
+    req_count = 0
+    stats = {"closed": 0, "partial": 0, "errors": 0}
+
+    for row in rows:
+        coupon_id = row["id"]
+        legs = json.loads(row["legs_json"])
+        total_odds = row["total_odds"]
+        stake = row["stake_pln"]
+        match_date = row["match_date_first"]
+
+        # Sprawdź czy data nie jest za stara
+        try:
+            leg_date = datetime.fromisoformat(match_date).date()
+            if leg_date < cutoff:
+                if verbose:
+                    print(f"  [SKIP] Kupon #{coupon_id} — data {match_date} za stara (>{days_back}d)")
+                continue
+        except (ValueError, TypeError):
+            pass
+
+        leg_results: list[int | None] = []
+
+        for leg in legs:
+            home = leg.get("home", leg.get("mecz", "").split(" vs ")[0])
+            away = leg.get("away", leg.get("mecz", "").split(" vs ")[-1])
+            tip = leg.get("tip", "")
+            league = leg.get("league", "")
+
+            league_ids = _liga_ids_dla_nazwy(league)
+            wynik = None
+
+            for lid in league_ids:
+                cache_key = (match_date[:10], lid)
+                if cache_key not in fixtures_cache:
+                    if req_count >= 80:
+                        break
+                    fixtures_cache[cache_key] = _fetch_fixtures(api_key, lid, match_date[:10])
+                    req_count += 1
+                    time.sleep(0.5)
+
+                pending_mock = {"team_home": home, "team_away": away}
+                wynik = _znajdz_wynik(pending_mock, fixtures_cache[cache_key])
+                if wynik:
+                    break
+
+            if wynik:
+                correct = _oblicz_tip_correct(tip, wynik)
+                leg_results.append(correct)
+                if verbose:
+                    symbol = "✓" if correct == 1 else ("✗" if correct == 0 else "?")
+                    print(f"  [{symbol}] {home} vs {away} → {wynik} (typ: {tip})")
+            else:
+                leg_results.append(None)
+                if verbose:
+                    print(f"  [NOT FOUND] {home} vs {away} ({match_date[:10]})")
+
+        # Oceń kupon
+        if None in leg_results:
+            stats["partial"] += 1
+            if verbose:
+                print(f"  [PARTIAL] Kupon #{coupon_id} — czekam na brakujące wyniki")
+            continue
+
+        all_correct = all(r == 1 for r in leg_results)
+        new_status = "WIN" if all_correct else "LOSE"
+        payout = round(stake * total_odds, 2) if all_correct else 0.0
+        roi = round((payout - stake) / stake * 100, 1) if stake else 0.0
+
+        if verbose:
+            tag = "DRY" if dry_run else "CLOSE"
+            print(f"  [{tag}] Kupon #{coupon_id} → {new_status} | wypłata: {payout} PLN | ROI: {roi}%")
+
+        if not dry_run:
+            try:
+                with _connect() as conn:
+                    conn.execute(
+                        "UPDATE coupons SET status=?, payout_pln=?, roi_pct=? WHERE id=?",
+                        (new_status, payout, roi, coupon_id),
+                    )
+                    # Aktualizuj bankroll przy wygranej
+                    if all_correct and payout > 0:
+                        cur_balance = conn.execute(
+                            "SELECT balance FROM bankroll_state ORDER BY id DESC LIMIT 1"
+                        ).fetchone()
+                        if cur_balance:
+                            new_balance = round(cur_balance["balance"] + payout, 2)
+                            conn.execute(
+                                "UPDATE bankroll_state SET balance=?, updated_at=? WHERE id=(SELECT MAX(id) FROM bankroll_state)",
+                                (new_balance, datetime.now().isoformat()),
+                            )
+                            conn.execute(
+                                "INSERT INTO bankroll_history (timestamp, change_pln, new_balance, type, description) VALUES (?,?,?,?,?)",
+                                (datetime.now().isoformat(), payout, new_balance, "WIN", f"Kupon #{coupon_id} WIN"),
+                            )
+                stats["closed"] += 1
+            except Exception as e:
+                log.error("Błąd zamykania kuponu ID=%s: %s", coupon_id, e)
+                stats["errors"] += 1
+
+    if verbose:
+        print(f"\n[CouponUpdater] Zamknięte: {stats['closed']} | Częściowe: {stats['partial']} | Błędy: {stats['errors']}")
+    return stats
+
+
 if __name__ == "__main__":
     import argparse
     logging.basicConfig(level=logging.WARNING)
@@ -301,3 +449,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     update_pending(days_back=args.dni, dry_run=args.dry, verbose=True)
+    print()
+    update_active_coupons(days_back=args.dni, dry_run=args.dry, verbose=True)

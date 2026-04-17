@@ -47,6 +47,10 @@ F:\bot\
 | PDF test | Regression test PDF (`tests/test_pdf_export.py`) — polskie znaki, 5 testów | `57a24ca` |
 | Przeniesienie plików | assets/, tests/scratch/, usunięcie fbotsrcfootstatsgui/ i scratch/ | `5f15c31` |
 | DejaVuSans font | assets/DejaVuSans.ttf dodany, `_zarejestruj_font()` wywołanie naprawione | `998e51f` |
+| Dashboard v3.1 | FastAPI + SQLite live dashboard (`api/preview.html`) — bankroll, historia, ustawienia | `4261fc5` |
+| Kreator Kuponu | 5-krokowy wizard interaktywny — mecze Bzzoiro → Kelly → zapis do DB | `8e40571` |
+| Harmonogram | `docs/scheduler_setup.md` + `scripts/` — Windows Task Scheduler bez okna konsoli | `566c822` |
+| Zamykanie kuponów | `update_active_coupons()` w `results_updater.py` — ACTIVE→WIN/LOSE po meczach | `(bieżący)` |
 
 ---
 
@@ -78,7 +82,7 @@ _(brak aktywnych blokerów)_
 ### Priorytet ŚREDNI
 - [ ] **BetBuilder Superbet** — Playwright login, scraper SuperSocial, `scrapers/superbet.py`
 - [ ] **Test integracji Telegram** — `tests/test_telegram.py` wysyła testową wiadomość (weryfikacja tokenu i uprawnień bota)
-- [ ] **Weryfikacja harmonogramu** — `docs/scheduler_setup.md` z instrukcją dodania `.bat` do Task Scheduler Windows
+- [x] ~~**Weryfikacja harmonogramu**~~ — **GOTOWE** (`docs/scheduler_setup.md` + `scripts/` z `silent_run.vbs`)
 - [x] ~~**Instalacja Streamlit**~~ — **GOTOWE** (`src/footstats/dashboard.py`, uruchom: `python -m streamlit run src/footstats/dashboard.py`)
 
 ### Priorytet NISKI
@@ -97,7 +101,8 @@ _(brak aktywnych blokerów)_
 | Scraper | Playwright | login Bzzoiro, BetBuilder |
 | PDF | ReportLab + DejaVuSans | eksport kuponów |
 | DB | SQLite WAL | `data/footstats_backtrack.db` |
-| UI / Web Dashboard | **Streamlit** | wyświetlanie kuponów i wyników z SQLite |
+| UI / Web Dashboard | **FastAPI + HTML/JS** (`api/preview.html`) | live dashboard — bankroll, historia, ustawienia, kreator |
+| UI / Web Dashboard (legacy) | **Streamlit** | `src/footstats/dashboard.py` (stary UI, nadal działa) |
 | LLM Observability | **Langfuse** | śledzenie zapytań Groq i kosztów tokenów (Etap 7) |
 | Scheduler | Windows Task Scheduler + .bat (VBScript) | ciche uruchamianie agentów |
 

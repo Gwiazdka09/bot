@@ -1,16 +1,18 @@
-# FootStats v3.0
+# FootStats v3.1 — Interaktywny Kreator
 
-Narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), 3 źródła danych API oraz AI (Groq llama-3.3-70b) w jedno CLI.
+Narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), 3 źródła danych API oraz AI (Groq llama-3.3-70b) w jedno CLI z live dashboardem i interaktywnym kreatorem kuponów.
 
 ## Funkcje
 
+- **Live Dashboard** – FastAPI + HTML/JS na porcie 8000 (`/preview`) — bankroll, ROI, historia kuponów, ustawienia Kelly
+- **Kreator Kuponu** – 5-krokowy interaktywny wizard: mecze Bzzoiro → analiza AI → wybór typów → Kelly calc → zapis
+- **Kalibracja Kelly v2** – hit-rate z ostatnich 10 kuponów + forma bota (3x seria WIN/LOSE)
+- **Pętla Feedbacku AI** – po każdej porażce Groq generuje wniosek → wstrzykiwany do kolejnego promptu
+- **Zamykanie kuponów** – automatyczne ACTIVE→WIN/LOSE na podstawie API-Football + aktualizacja bankrolla
 - **Predykcja meczów** – model Poissona + ML cross-walidacja z Bzzoiro
 - **Pewniaczki 48h** – skanowanie wszystkich lig Bzzoiro, Scout Bot EV, analiza AI
 - **AI Analiza** – Groq 70B analizuje typy, buduje kupony AKO, ocenia Twój kupon
 - **Form Scraper** – SofaScore (primary) + FlashScore (fallback), forma + kontuzje
-- **SuperOferta** – scrapuje boosted odds ze STS, porównuje z Bzzoiro
-- **Analiza kolejki** – wszystkie nadchodzące mecze ligi + ranking pewności
-- **Dom/Wyjazd** – statystyki H/A drużyn
 - **Eksport PDF** – raporty z czcionką DejaVu (polskie znaki)
 - **Backtest DB** – SQLite, śledzenie skuteczności typów
 
@@ -55,18 +57,27 @@ BZZOIRO_KEY=twoj_klucz_bzzoiro
 GROQ_API_KEY=twoj_klucz_groq
 ```
 
+## Live Dashboard
+
+Uruchom serwer API:
+```bash
+python -m uvicorn footstats.api.main:app --port 8000
+```
+Otwórz: `http://localhost:8000` → przekieruje do `/preview`
+
+Zakładki: **Dashboard** (bankroll + ROI) | **Historia** | **Ustawienia** | **Stwórz Kupon**
+
 ## Automatyczne uruchamianie (Windows Task Scheduler)
 
-Pliki `.bat` w katalogu głównym odpowiadają etapom dziennego pipeline'u:
+Instrukcja w `docs/scheduler_setup.md`. Skrypty w `scripts/`:
 
 | Plik | Czas | Opis |
 |------|------|------|
-| `run_daily_agent.bat` | ~08:00 | Faza draft — generuje kupon DRAFT |
-| `run_final_agent.bat` | ~1h przed meczem | Faza final — promuje DRAFT → ACTIVE |
-| `run_evening_agent.bat` | ~23:00 | Rozliczenie wyników kuponów ACTIVE |
-| `run_weekly_report.bat` | Niedziela 20:00 | Raport tygodniowy |
+| `scripts/run_dashboard.bat` | Przy starcie systemu | Serwer API na porcie 8000 |
+| `scripts/run_agent.bat` | 08:00 + 16:00 | Codzienna analiza + kupon |
+| `scripts/run_results.bat` | 23:30 | Aktualizacja wyników i zamknięcie kuponów |
 
-Aby dodać zadanie w Harmonogramie zadań Windows: `taskschd.msc` → Utwórz zadanie podstawowe → Akcja: Uruchom program → podaj pełną ścieżkę do `.bat`.
+Uruchamiane przez `scripts/silent_run.vbs` — bez okna konsoli (`wscript.exe`).
 
 ## Uruchomienie
 
