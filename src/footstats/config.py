@@ -8,7 +8,7 @@ from rich.prompt import Prompt, Confirm
 # ================================================================
 #  STALE
 # ================================================================
-VERSION         = "v2.7 MultiSource & Intelligence"
+VERSION         = "v3.0 RAG + Kelly Calibration"
 MAX_GOLE        = 8
 OSTATNIE_N      = 15
 BONUS_DOMOWY    = 1.15
@@ -43,7 +43,7 @@ _FINAL_STAGES = {"FINAL", "THIRD_PLACE", "GROUP_STAGE", "PRELIMINARY_ROUND"}
 _SINGLE_MATCH_COMPS = {"EC", "WC"}
 
 # ── v2.7 NOWE STALE – MultiSource & Intelligence ───────────────────
-PEWNIACZEK_PROG    = 75.0  # min. prawdopodobienstwto (%) dla Pewniaczka
+PEWNIACZEK_PROG    = 90.0  # min. prawdopodobienstwto (%) dla Pewniaczka
 PEWNIACZEK_DNI     = 7     # ile dni do przodu szukamy (tydzien)
 DOMWYJAZD_MIN_M    = 5     # min. mecze dom/wyjazd do analizy
 DOMWYJAZD_PODROZNIK= 0.20  # min. roznica wyjazd-dom w pkt/mecz -> "Podroznik"

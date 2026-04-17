@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FootStats — Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    * { font-family: 'Inter', sans-serif; box-sizing: border-box; }
+    body { background: #0f172a; color: #e2e8f0; margin: 0; }
+
+    .glass-card {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 1.25rem;
+    }
+    .sidebar {
+      background: rgba(255,255,255,0.03);
+      border-right: 1px solid rgba(255,255,255,0.07);
+    }
+    .nav-item {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; border-radius: 12px; cursor: pointer;
+      transition: all 0.15s; color: #94a3b8; border: 1px solid transparent;
+    }
+    .nav-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .nav-item.active { background: rgba(99,102,241,0.15); color: #818cf8; border-color: rgba(99,102,241,0.25); }
+
+    /* Accordion */
+    .accordion-row { cursor: pointer; transition: background 0.15s; }
+    .accordion-row:hover { background: rgba(255,255,255,0.03); }
+    .accordion-body {
+      max-height: 0; overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.2s ease;
+    }
+    .accordion-body.open { max-height: 800px; }
+    .accordion-chevron { transition: transform 0.25s ease; }
+    .accordion-chevron.open { transform: rotate(180deg); }
+
+    .status-pill {
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; letter-spacing: 0.05em;
+    }
+    .pill-active  { background: rgba(251,191,36,0.12); color: #fbbf24; }
+    .pill-won     { background: rgba(52,211,153,0.12); color: #34d399; }
+    .pill-lost    { background: rgba(248,113,113,0.12); color: #f87171; }
+    .pill-draft   { background: rgba(148,163,184,0.12); color: #94a3b8; }
+    .pill-void    { background: rgba(148,163,184,0.12); color: #94a3b8; }
+
+    .dot-active { width:10px; height:10px; border-radius:50%; background:#fbbf24;
+                  animation: pulse-dot 2s infinite; box-shadow: 0 0 0 0 rgba(251,191,36,0.4); }
+    .dot-won    { width:10px; height:10px; border-radius:50%; background:#34d399; }
+    .dot-lost   { width:10px; height:10px; border-radius:50%; background:#f87171; }
+    .dot-neutral{ width:10px; height:10px; border-radius:50%; background:#475569; }
+    @keyframes pulse-dot {
+      0%   { box-shadow: 0 0 0 0 rgba(251,191,36,0.4); }
+      70%  { box-shadow: 0 0 0 8px rgba(251,191,36,0); }
+      100% { box-shadow: 0 0 0 0 rgba(251,191,36,0); }
+    }
+
+    .spinner {
+      width:40px; height:40px; border:3px solid rgba(255,255,255,0.1);
+      border-top-color:#818cf8; border-radius:50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    .settings-input {
+      width: 100%; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
+      padding: 10px 14px; color: #fff; font-size: 13px; font-weight: 600;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .settings-input:focus { outline: none; border-color: rgba(99,102,241,0.5); background: rgba(255,255,255,0.07); }
+    .settings-input::placeholder { color: #475569; font-weight: 400; }
+    ::-webkit-scrollbar { width:5px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:3px; }
+  </style>
+</head>
+<body class="flex min-h-screen">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside class="sidebar hidden lg:flex flex-col p-6 fixed h-screen w-64 top-0 left-0 z-20">
+    <div class="mb-10">
+      <div class="text-2xl font-extrabold bg-gradient-to-r from-indigo-400 to-pink-400 bg-clip-text text-transparent">FootStats</div>
+      <p class="text-xs text-slate-600 mt-1">Live Dashboard</p>
+    </div>
+    <nav class="space-y-2 flex-1">
+      <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        <span class="font-semibold text-sm">Dashboard</span>
+      </div>
+      <div class="nav-item" id="nav-history" onclick="showView('history')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="font-semibold text-sm">Historia</span>
+      </div>
+      <div class="nav-item" id="nav-settings" onclick="showView('settings')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        <span class="font-semibold text-sm">Ustawienia</span>
+      </div>
+    </nav>
+    <div class="p-4 bg-white/5 rounded-xl border border-white/5 mt-auto">
+      <p class="text-xs text-slate-500 uppercase tracking-tight">Właściciel</p>
+      <p class="font-bold text-slate-300 text-sm">Jakub</p>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main class="flex-1 lg:ml-64 p-4 lg:p-10 min-h-screen">
+
+    <!-- Loading overlay -->
+    <div id="loading" class="flex items-center justify-center h-full min-h-[60vh]">
+      <div class="flex flex-col items-center gap-4">
+        <div class="spinner"></div>
+        <p class="text-slate-500 text-sm">Pobieranie danych...</p>
+      </div>
+    </div>
+
+    <!-- ===== DASHBOARD ===== -->
+    <div id="view-dashboard" class="hidden">
+      <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
+        <div>
+          <h1 class="text-3xl font-bold mb-1">Witaj, Jakub</h1>
+          <p class="text-slate-500 text-sm">Twoje imperium bukmacherskie jest online.</p>
+        </div>
+        <div class="glass-card px-8 py-5 flex items-center gap-4 border-indigo-500/20 bg-indigo-500/5">
+          <div class="p-3 bg-indigo-500/20 rounded-xl">
+            <svg width="24" height="24" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400 uppercase tracking-widest font-bold mb-0.5">Dostępny Balans</p>
+            <p class="text-2xl font-bold text-white leading-none">
+              <span id="bankroll-display">—</span> <span class="text-base font-normal text-indigo-300">PLN</span>
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <!-- Stats: ROI | Wygrane 30d | Aktywne -->
+      <section class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+        <!-- 2. ROI -->
+        <div class="glass-card p-7">
+          <div class="p-2.5 bg-emerald-500/10 rounded-xl inline-block mb-5">
+            <svg width="20" height="20" fill="none" stroke="#34d399" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+          </div>
+          <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">ROI</p>
+          <div class="text-3xl font-bold mb-1" id="roi-display">—</div>
+          <p class="text-slate-500 text-xs">Zwrot z inwestycji (wszystkie kupony)</p>
+        </div>
+        <!-- 3. Wygrane 30d -->
+        <div class="glass-card p-7">
+          <div class="p-2.5 bg-indigo-500/10 rounded-xl inline-block mb-5">
+            <svg width="20" height="20" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Wygrane (30 dni)</p>
+          <div class="text-3xl font-bold mb-1" id="wins-display">—</div>
+          <p class="text-slate-500 text-xs" id="wins-sub">Ostatnie 30 dni</p>
+        </div>
+        <!-- 4. Aktywne -->
+        <div class="glass-card p-7">
+          <div class="p-2.5 bg-amber-500/10 rounded-xl inline-block mb-5">
+            <svg width="20" height="20" fill="none" stroke="#fbbf24" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <p class="text-slate-500 text-xs font-semibold uppercase tracking-wider mb-1">Aktywne kupony</p>
+          <div class="text-3xl font-bold mb-1 text-amber-400" id="active-count-display">—</div>
+          <p class="text-slate-500 text-xs">Oczekujące na wynik</p>
+        </div>
+      </section>
+
+      <!-- Chart -->
+      <section class="glass-card p-8 mb-10">
+        <h2 class="text-base font-bold mb-6 flex items-center gap-2 text-slate-300">
+          <svg width="18" height="18" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/></svg>
+          Progresja Bankrolla
+        </h2>
+        <canvas id="bankroll-chart" height="100"></canvas>
+      </section>
+
+      <!-- Active coupons -->
+      <section>
+        <div class="flex justify-between items-center mb-6">
+          <h2 class="text-xl font-bold">Otwarte Predykcje</h2>
+          <button onclick="showView('history')" class="text-xs text-indigo-400 hover:text-indigo-300 font-semibold px-3 py-1.5 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 transition-all flex items-center gap-1">
+            Pełna historia
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+        <div id="active-coupons-grid" class="grid grid-cols-1 md:grid-cols-2 gap-6"></div>
+      </section>
+    </div>
+
+    <!-- ===== HISTORY ===== -->
+    <div id="view-history" class="hidden">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-1">Historia Kuponów</h1>
+        <p class="text-slate-500 text-sm">Kliknij kupon aby rozwinąć tabelę meczów.</p>
+      </div>
+      <div id="history-list" class="space-y-3"></div>
+    </div>
+
+    <!-- ===== SETTINGS ===== -->
+    <div id="view-settings" class="hidden">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-1">Ustawienia Bota</h1>
+        <p class="text-slate-500 text-sm">Konfiguracja parametrów systemu.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+
+        <!-- Bankroll edit -->
+        <div class="glass-card p-8">
+          <h3 class="text-base font-bold mb-6 flex items-center gap-2">
+            <svg width="18" height="18" fill="none" stroke="#818cf8" stroke-width="2" viewBox="0 0 24 24"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/></svg>
+            Edycja Bankrolla
+          </h3>
+          <p class="text-slate-500 text-xs mb-4">Aktualne saldo: <span id="settings-bankroll-current" class="text-indigo-300 font-semibold">—</span> PLN</p>
+          <label class="block text-xs text-slate-400 font-semibold uppercase tracking-wider mb-2">Nowe saldo (PLN)</label>
+          <div class="flex gap-3">
+            <input
+              id="bankroll-input"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="np. 500.00"
+              class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white text-sm font-semibold focus:outline-none focus:border-indigo-500/50 focus:bg-white/8 transition-all"
+            />
+            <button
+              onclick="saveBankroll()"
+              id="save-bankroll-btn"
+              class="px-5 py-3 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white font-bold text-sm rounded-xl transition-all"
+            >Zapisz</button>
+          </div>
+          <p id="bankroll-save-msg" class="text-xs mt-3 hidden"></p>
+        </div>
+
+        <!-- Bot config editable -->
+        <div class="glass-card p-8">
+          <h3 class="text-base font-bold mb-6 flex items-center gap-2">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+            Algorytm & Ryzyko
+          </h3>
+
+          <div class="space-y-4">
+            <div>
+              <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">Wersja systemu</label>
+              <input id="cfg-version" type="text" class="settings-input" placeholder="v3.0" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">Próg Pewniaczka (%)</label>
+              <input id="cfg-pewniaczek" type="number" min="0" max="100" step="0.5" class="settings-input" placeholder="80" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">Próg Kandydatów (%)</label>
+              <input id="cfg-kandydat" type="number" min="0" max="100" step="0.5" class="settings-input" placeholder="55" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">Fractional Kelly (mianownik)</label>
+              <input id="cfg-kelly" type="number" min="1" max="20" step="1" class="settings-input" placeholder="4" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">
+                Kelly Warstwa 1 — mnożniki hit-rate
+                <span class="text-slate-600 normal-case tracking-normal font-normal ml-1">(słaby / normalny / dobry)</span>
+              </label>
+              <input id="cfg-kelly-w1" type="text" class="settings-input" placeholder="0.7 / 1.0 / 1.1" />
+              <p class="text-xs text-slate-600 mt-1">Format: 0.7 / 1.0 / 1.1  (hit-rate &lt;40% / 40-60% / &gt;60%)</p>
+            </div>
+            <div class="py-2 border-t border-white/5 text-sm">
+              <span class="text-slate-500 text-xs">Kelly Warstwa 2:</span>
+              <span class="font-semibold text-slate-300 text-xs ml-2">forma bota (3× streak WIN/LOSE) — nadrzędna</span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 mt-6">
+            <button onclick="saveSettings()" id="save-settings-btn"
+              class="flex-1 py-3 px-5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700 text-white font-bold text-sm rounded-xl transition-all">
+              Zapisz ustawienia
+            </button>
+          </div>
+          <p id="settings-save-msg" class="text-xs mt-3 hidden"></p>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    const API = '';  // relative — serwowany przez FastAPI
+
+    // ---- helpers ----
+    function statusClass(s) {
+      s = (s || '').toUpperCase();
+      if (['WON','WIN'].includes(s))      return { pill:'pill-won',  dot:'dot-won',  label:'WYGRANA' };
+      if (['LOST','LOSE'].includes(s))    return { pill:'pill-lost', dot:'dot-lost', label:'PRZEGRANA' };
+      if (['ACTIVE','PENDING'].includes(s))return { pill:'pill-active',dot:'dot-active',label:'AKTYWNY' };
+      if (s === 'DRAFT')                  return { pill:'pill-draft', dot:'dot-neutral', label:'DRAFT' };
+      return                               { pill:'pill-void',  dot:'dot-neutral', label: s };
+    }
+
+    function fmt(v, decimals=2) {
+      if (v == null) return '—';
+      return parseFloat(v).toFixed(decimals);
+    }
+
+    function fmtDate(dt) {
+      if (!dt) return '';
+      return dt.slice(0, 10);
+    }
+
+    // ---- render coupon card (dashboard) ----
+    function renderCouponCard(c) {
+      const sc = statusClass(c.status);
+      const legs = (c.legs || []).map(l => `
+        <div class="flex justify-between items-start gap-2 py-1">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold text-slate-200 truncate">${l.home} vs ${l.away}</p>
+            <p class="text-xs text-slate-500 mt-0.5">Typ: <span class="text-slate-300 font-medium">${l.tip}</span></p>
+          </div>
+          <div class="text-xs font-bold bg-indigo-500/10 text-indigo-300 px-2.5 py-1 rounded-lg shrink-0">@${fmt(l.odds)}</div>
+        </div>
+      `).join('');
+
+      return `
+        <div class="glass-card overflow-hidden hover:border-indigo-500/30 transition-all">
+          <div class="px-5 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.03]">
+            <div class="flex items-center gap-2.5">
+              <div class="${sc.dot}"></div>
+              <span class="font-bold text-sm">Kupon #${c.id}</span>
+              <span class="text-xs text-slate-500 font-normal">[${(c.phase||'').toUpperCase()}]</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="status-pill ${sc.pill}">${sc.label}</span>
+              <span class="text-xs text-slate-500">${fmtDate(c.created_at)}</span>
+            </div>
+          </div>
+          <div class="px-5 py-4 space-y-2">${legs}</div>
+          <div class="px-5 py-4 bg-white/[0.02] flex justify-between items-center border-t border-white/5">
+            <div class="flex gap-6">
+              <div><p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Kurs</p>
+                <p class="text-xl font-bold text-white">${fmt(c.total_odds)}</p></div>
+              <div><p class="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-0.5">Stawka</p>
+                <p class="text-xl font-bold text-indigo-400">${fmt(c.stake_pln)} <span class="text-xs">PLN</span></p></div>
+            </div>
+            ${c.payout_pln ? `<div class="text-xs font-bold px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400">ZWROT: ${fmt(c.payout_pln)} PLN</div>` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    // ---- render history accordion ----
+    function renderAccordionRow(c, idx) {
+      const sc = statusClass(c.status);
+      const matchDate = c.match_date_first || fmtDate(c.created_at);
+      const legRows = (c.legs || []).map(l => {
+        const wynikClass = ['WON','WIN'].includes((c.status||'').toUpperCase())
+          ? 'text-emerald-400' : ['LOSE','LOST'].includes((c.status||'').toUpperCase())
+          ? 'text-rose-400' : 'text-amber-400';
+        const wynik = ['WON','WIN'].includes((c.status||'').toUpperCase()) ? 'WYGRANA'
+                    : ['LOSE','LOST'].includes((c.status||'').toUpperCase()) ? 'PRZEGRANA'
+                    : sc.label;
+        return `
+          <tr class="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02]">
+            <td class="px-5 py-2.5 pr-4 text-xs text-slate-400 whitespace-nowrap">${matchDate}</td>
+            <td class="py-2.5 pr-4 text-sm font-semibold text-slate-200">${l.home} <span class="text-slate-500 font-normal">vs</span> ${l.away}</td>
+            <td class="py-2.5 px-4 text-xs font-medium text-slate-300 whitespace-nowrap">${l.tip}</td>
+            <td class="py-2.5 px-4 text-sm font-bold text-indigo-300 whitespace-nowrap">@${fmt(l.odds)}</td>
+            <td class="py-2.5 px-4 text-xs font-bold ${wynikClass} whitespace-nowrap">${wynik}</td>
+          </tr>`;
+      }).join('');
+
+      return `
+        <div class="glass-card overflow-hidden">
+          <div class="accordion-row px-5 py-4 flex items-center gap-4 select-none"
+               onclick="toggleAccordion(${idx})">
+            <div class="${sc.dot} shrink-0"></div>
+            <div class="flex-1 min-w-0 flex flex-col sm:flex-row sm:items-center sm:gap-4 gap-0.5">
+              <span class="font-bold text-sm">Kupon #${c.id}</span>
+              <span class="text-xs text-slate-500">${fmtDate(c.created_at)} · faza: ${(c.phase||'').toUpperCase()}</span>
+            </div>
+            <div class="hidden sm:flex items-center gap-6 text-center shrink-0">
+              <div><p class="text-[10px] text-slate-500 uppercase tracking-widest">Kurs</p>
+                   <p class="font-bold text-sm">@${fmt(c.total_odds)}</p></div>
+              <div><p class="text-[10px] text-slate-500 uppercase tracking-widest">Stawka</p>
+                   <p class="font-bold text-sm">${fmt(c.stake_pln)} PLN</p></div>
+              <div><p class="text-[10px] text-slate-500 uppercase tracking-widest">Wypłata</p>
+                   <p class="font-bold text-sm ${['WON','WIN'].includes((c.status||'').toUpperCase()) ? 'text-emerald-400' : 'text-slate-600'}">${c.payout_pln ? fmt(c.payout_pln)+' PLN' : '—'}</p></div>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              <span class="status-pill ${sc.pill}">${sc.label}</span>
+              <svg class="accordion-chevron" id="chevron-${idx}" width="16" height="16" fill="none" stroke="#64748b" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+            </div>
+          </div>
+          <div class="accordion-body" id="acc-body-${idx}">
+            <div class="border-t border-white/[0.06] bg-white/[0.02] overflow-x-auto">
+              <table class="w-full text-left">
+                <thead>
+                  <tr class="border-b border-white/[0.06]">
+                    <th class="px-5 py-2.5 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Data</th>
+                    <th class="px-0 py-2.5 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Mecz</th>
+                    <th class="px-4 py-2.5 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Typ</th>
+                    <th class="px-4 py-2.5 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Kurs</th>
+                    <th class="px-4 py-2.5 text-[10px] text-slate-500 uppercase tracking-widest font-semibold">Wynik</th>
+                  </tr>
+                </thead>
+                <tbody>${legRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function toggleAccordion(idx) {
+      const body    = document.getElementById('acc-body-' + idx);
+      const chevron = document.getElementById('chevron-' + idx);
+      body.classList.toggle('open');
+      chevron.classList.toggle('open');
+    }
+
+    // ---- navigation ----
+    function showView(name) {
+      ['dashboard','history','settings'].forEach(v => {
+        document.getElementById('view-' + v).classList.toggle('hidden', v !== name);
+        const nav = document.getElementById('nav-' + v);
+        if (nav) nav.classList.toggle('active', v === name);
+      });
+    }
+
+    // ---- Chart ----
+    let chartInstance = null;
+    function renderChart(data) {
+      const ctx = document.getElementById('bankroll-chart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: data.map(d => d.time ? d.time.slice(5,16) : ''),
+          datasets: [{
+            data: data.map(d => d.balance),
+            borderColor: '#818cf8',
+            borderWidth: 2.5,
+            pointRadius: data.length < 20 ? 4 : 0,
+            pointBackgroundColor: '#818cf8',
+            fill: true,
+            backgroundColor: (ctx) => {
+              const g = ctx.chart.ctx.createLinearGradient(0,0,0,200);
+              g.addColorStop(0, 'rgba(129,140,248,0.3)');
+              g.addColorStop(1, 'rgba(129,140,248,0)');
+              return g;
+            },
+            tension: 0.4
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#1e293b',
+              borderColor: 'rgba(255,255,255,0.08)',
+              borderWidth: 1,
+              titleColor: '#94a3b8',
+              bodyColor: '#fff',
+              callbacks: { label: c => ` ${parseFloat(c.parsed.y).toFixed(2)} PLN` }
+            }
+          },
+          scales: {
+            x: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color:'#475569', font:{size:11} } },
+            y: { grid: { color: 'rgba(255,255,255,0.03)' }, ticks: { color:'#475569', font:{size:11}, callback: v => v+' PLN' } }
+          }
+        }
+      });
+    }
+
+    // ---- Save Bankroll ----
+    async function saveBankroll() {
+      const input = document.getElementById('bankroll-input');
+      const btn   = document.getElementById('save-bankroll-btn');
+      const msg   = document.getElementById('bankroll-save-msg');
+      const val   = parseFloat(input.value);
+
+      if (isNaN(val) || val < 0) {
+        msg.textContent = 'Podaj prawidłową kwotę.';
+        msg.className = 'text-xs mt-3 text-rose-400';
+        msg.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Zapisuję...';
+
+      try {
+        const res = await fetch('/api/bankroll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ balance: val })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+
+        // Update displays
+        document.getElementById('bankroll-display').textContent = parseFloat(data.balance).toFixed(2);
+        document.getElementById('settings-bankroll-current').textContent = parseFloat(data.balance).toFixed(2);
+        input.value = '';
+        msg.textContent = `Zapisano: ${parseFloat(data.balance).toFixed(2)} PLN (${data.updated_at})`;
+        msg.className = 'text-xs mt-3 text-emerald-400';
+        msg.classList.remove('hidden');
+      } catch(e) {
+        msg.textContent = 'Błąd: ' + e.message;
+        msg.className = 'text-xs mt-3 text-rose-400';
+        msg.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Zapisz';
+      }
+    }
+
+    // ---- Init ----
+    async function init() {
+      try {
+        const [statusRes, activeRes, historyRes, chartRes, configRes] = await Promise.all([
+          fetch('/api/status'),
+          fetch('/api/coupons/active'),
+          fetch('/api/coupons?limit=50'),
+          fetch('/api/bankroll/history?limit=60'),
+          fetch('/api/config').catch(() => null)
+        ]);
+
+        const status  = await statusRes.json();
+        const active  = await activeRes.json();
+        const history = await historyRes.json();
+        const chart   = await chartRes.json();
+
+        // --- Dashboard ---
+        const bankroll = parseFloat(status.bankroll || 0).toFixed(2);
+        document.getElementById('bankroll-display').textContent = bankroll;
+        document.getElementById('settings-bankroll-current').textContent = bankroll;
+
+        const roi = status.stats?.roi_pct ?? 0;
+        const roiEl = document.getElementById('roi-display');
+        roiEl.textContent = (roi >= 0 ? '+' : '') + roi + '%';
+        roiEl.className = `text-3xl font-bold mb-1 ${roi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+
+        document.getElementById('wins-display').textContent = status.stats?.wins_last_30d ?? 0;
+        document.getElementById('active-count-display').textContent = active.length;
+
+        // Chart
+        if (chart.length > 0) {
+          renderChart(chart);
+        } else {
+          // Fallback: synthetic from bankroll_history empty
+          document.getElementById('bankroll-chart').parentElement.innerHTML =
+            '<p class="text-slate-600 text-sm text-center py-8">Brak danych historycznych bankrolla.</p>';
+        }
+
+        // Active coupons
+        const grid = document.getElementById('active-coupons-grid');
+        if (active.length === 0) {
+          grid.innerHTML = `<div class="md:col-span-2 text-center p-12 glass-card text-slate-500 text-sm">Brak otwartych kuponów.</div>`;
+        } else {
+          grid.innerHTML = active.map(renderCouponCard).join('');
+        }
+
+        // --- History accordion ---
+        const histEl = document.getElementById('history-list');
+        if (history.length === 0) {
+          histEl.innerHTML = `<div class="text-center p-12 glass-card text-slate-500 text-sm">Historia jest pusta.</div>`;
+        } else {
+          histEl.innerHTML = history.map((c,i) => renderAccordionRow(c, i)).join('');
+        }
+
+        // --- Settings (nowy endpoint) ---
+        const settingsRes = await fetch('/api/settings').catch(() => null);
+        if (settingsRes && settingsRes.ok) {
+          const s = await settingsRes.json();
+          _fillSettings(s);
+        } else if (configRes && configRes.ok) {
+          // fallback do legacy /api/config
+          const cfg = await configRes.json();
+          _fillSettings({
+            version:              cfg.version,
+            pewniaczek_prog:      cfg.pewniaczek_prog,
+            kandydat_prog:        cfg.min_confidence ? (cfg.min_confidence * 100).toFixed(1) : '',
+            kelly_fraction:       cfg.kelly_fraction,
+            kelly_w1_multipliers: '0.7 / 1.0 / 1.1',
+          });
+        }
+
+      } catch(e) {
+        document.getElementById('loading').innerHTML =
+          `<div class="text-center"><p class="text-rose-400 font-semibold mb-2">Błąd połączenia z API</p>
+           <p class="text-slate-500 text-sm">${e.message}</p>
+           <p class="text-slate-600 text-xs mt-3">Uruchom: <code class="text-indigo-400">uvicorn footstats.api.main:app --reload</code></p></div>`;
+        return;
+      }
+
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('view-dashboard').classList.remove('hidden');
+    }
+
+    // ---- Fill settings form ----
+    function _fillSettings(s) {
+      if (s.version          != null) document.getElementById('cfg-version').value    = s.version;
+      if (s.pewniaczek_prog  != null) document.getElementById('cfg-pewniaczek').value = s.pewniaczek_prog;
+      if (s.kandydat_prog    != null) document.getElementById('cfg-kandydat').value   = s.kandydat_prog;
+      if (s.kelly_fraction   != null) document.getElementById('cfg-kelly').value      = s.kelly_fraction;
+      if (s.kelly_w1_multipliers != null) document.getElementById('cfg-kelly-w1').value = s.kelly_w1_multipliers;
+    }
+
+    // ---- Save Settings ----
+    async function saveSettings() {
+      const btn = document.getElementById('save-settings-btn');
+      const msg = document.getElementById('settings-save-msg');
+      btn.disabled = true;
+      btn.textContent = 'Zapisuję...';
+
+      const payload = {
+        version:              document.getElementById('cfg-version').value.trim()   || null,
+        pewniaczek_prog:      parseFloat(document.getElementById('cfg-pewniaczek').value) || null,
+        kandydat_prog:        parseFloat(document.getElementById('cfg-kandydat').value)   || null,
+        kelly_fraction:       parseInt(document.getElementById('cfg-kelly').value)        || null,
+        kelly_w1_multipliers: document.getElementById('cfg-kelly-w1').value.trim()        || null,
+      };
+
+      try {
+        const res = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) throw new Error(await res.text());
+        msg.textContent = 'Zapisano. Zmiany aktywne po restarcie serwera.';
+        msg.className = 'text-xs mt-3 text-emerald-400';
+      } catch(e) {
+        msg.textContent = 'Błąd: ' + e.message;
+        msg.className = 'text-xs mt-3 text-rose-400';
+      } finally {
+        msg.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Zapisz ustawienia';
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
