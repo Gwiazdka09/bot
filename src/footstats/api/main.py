@@ -268,6 +268,266 @@ def update_settings(data: SettingsUpdate):
         conn.close()
     return {"ok": True, "updated": list(updates.keys())}
 
+# ============================================================
+# KREATOR KUPONU
+# ============================================================
+
+import os
+
+_MATCHES_CACHE: list = []  # prosty cache w pamięci (reset przy restarcie)
+
+
+def _fetch_predictions() -> list:
+    """Pobiera predykcje z Bzzoiro lub zwraca dane mock."""
+    try:
+        from footstats.scrapers.bzzoiro import BzzoiroClient
+        from footstats.config import ENV_BZZOIRO
+        key = os.getenv(ENV_BZZOIRO, "").strip()
+        if not key:
+            return _mock_predictions()
+        client = BzzoiroClient(key)
+        preds = client.predykcje_tygodnia()
+        return preds if preds else _mock_predictions()
+    except Exception:
+        return _mock_predictions()
+
+
+def _mock_predictions() -> list:
+    today = datetime.now().strftime("%Y-%m-%d")
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    return [
+        {"id": "m001", "gosp": "Legia Warszawa",   "gosc": "Lech Poznań",       "liga": "PKO BP Ekstraklasa", "data": today,    "godzina": "18:00",
+         "pred_ml": {"prob_home_win": 0.52, "prob_draw": 0.28, "prob_away_win": 0.20, "prob_over_25": 0.61, "prob_btts_yes": 0.48},
+         "odds": {"home": 1.85, "draw": 3.40, "away": 4.10, "over_2_5": 1.72, "under_2_5": 2.05, "btts": 1.90}},
+        {"id": "m002", "gosp": "Ajax Amsterdam",   "gosc": "PSV Eindhoven",      "liga": "Eredivisie",         "data": today,    "godzina": "20:45",
+         "pred_ml": {"prob_home_win": 0.45, "prob_draw": 0.25, "prob_away_win": 0.30, "prob_over_25": 0.72, "prob_btts_yes": 0.58},
+         "odds": {"home": 2.10, "draw": 3.30, "away": 3.50, "over_2_5": 1.58, "under_2_5": 2.40, "btts": 1.75}},
+        {"id": "m003", "gosp": "Roma",             "gosc": "Lazio",              "liga": "Serie A",            "data": today,    "godzina": "20:45",
+         "pred_ml": {"prob_home_win": 0.40, "prob_draw": 0.30, "prob_away_win": 0.30, "prob_over_25": 0.58, "prob_btts_yes": 0.52},
+         "odds": {"home": 2.30, "draw": 3.20, "away": 3.10, "over_2_5": 1.80, "under_2_5": 1.98, "btts": 1.85}},
+        {"id": "m004", "gosp": "RB Leipzig",       "gosc": "Borussia Dortmund",  "liga": "Bundesliga",         "data": today,    "godzina": "18:30",
+         "pred_ml": {"prob_home_win": 0.38, "prob_draw": 0.27, "prob_away_win": 0.35, "prob_over_25": 0.68, "prob_btts_yes": 0.55},
+         "odds": {"home": 2.45, "draw": 3.25, "away": 2.80, "over_2_5": 1.65, "under_2_5": 2.20, "btts": 1.80}},
+        {"id": "m005", "gosp": "Atlético Madrid",  "gosc": "Villarreal",         "liga": "La Liga",            "data": today,    "godzina": "21:00",
+         "pred_ml": {"prob_home_win": 0.55, "prob_draw": 0.24, "prob_away_win": 0.21, "prob_over_25": 0.55, "prob_btts_yes": 0.44},
+         "odds": {"home": 1.75, "draw": 3.60, "away": 4.50, "over_2_5": 1.85, "under_2_5": 1.93, "btts": 2.00}},
+        {"id": "m006", "gosp": "Sporting CP",      "gosc": "Benfica",            "liga": "Primeira Liga",      "data": today,    "godzina": "21:30",
+         "pred_ml": {"prob_home_win": 0.44, "prob_draw": 0.26, "prob_away_win": 0.30, "prob_over_25": 0.63, "prob_btts_yes": 0.50},
+         "odds": {"home": 2.20, "draw": 3.40, "away": 3.20, "over_2_5": 1.72, "under_2_5": 2.10, "btts": 1.88}},
+        {"id": "m007", "gosp": "Djurgårdens IF",   "gosc": "Malmö FF",           "liga": "Allsvenskan",        "data": tomorrow, "godzina": "17:00",
+         "pred_ml": {"prob_home_win": 0.35, "prob_draw": 0.28, "prob_away_win": 0.37, "prob_over_25": 0.60, "prob_btts_yes": 0.49},
+         "odds": {"home": 2.60, "draw": 3.15, "away": 2.70, "over_2_5": 1.78, "under_2_5": 2.00, "btts": 1.88}},
+        {"id": "m008", "gosp": "Feyenoord",        "gosc": "AZ Alkmaar",         "liga": "Eredivisie",         "data": tomorrow, "godzina": "18:45",
+         "pred_ml": {"prob_home_win": 0.50, "prob_draw": 0.25, "prob_away_win": 0.25, "prob_over_25": 0.70, "prob_btts_yes": 0.55},
+         "odds": {"home": 1.95, "draw": 3.50, "away": 3.80, "over_2_5": 1.62, "under_2_5": 2.25, "btts": 1.80}},
+    ]
+
+
+def _to_pct(v, default: float = 33.0) -> float:
+    """Konwertuje ułamek 0-1 lub procent na procenty 0-100."""
+    if v is None:
+        return default
+    f = float(v)
+    return round(f * 100 if 0 < f < 1.0 else f, 1)
+
+
+class AnalyzeRequest(BaseModel):
+    match_ids: List[str]
+
+
+class SelectionItem(BaseModel):
+    match_id: str
+    home: str
+    away: str
+    tip: str
+    odds: float
+    win_prob: float  # 0–100
+
+
+class KellyRequest(BaseModel):
+    selections: List[SelectionItem]
+
+
+class PlaceCouponRequest(BaseModel):
+    selections: List[SelectionItem]
+    total_odds: float
+    stake_pln: float
+    match_date: Optional[str] = None
+
+
+@app.get("/api/matches/today")
+def get_matches_today():
+    """Zwraca mecze na dziś/jutro z predykcjami ML (Bzzoiro lub mock)."""
+    global _MATCHES_CACHE
+    preds = _fetch_predictions()
+    today    = datetime.now().strftime("%Y-%m-%d")
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+    filtered = [m for m in preds if m.get("data", "") in (today, tomorrow)]
+    if not filtered:
+        filtered = preds[:15]
+    # Sortuj: preferuj wyraźnych faworytów (prob daleko od 33%)
+    def _interest(m):
+        ml = m.get("pred_ml") or {}
+        ph = _to_pct(ml.get("prob_home_win"), 33.0)
+        return -abs(ph - 33.0)
+    filtered.sort(key=_interest)
+    _MATCHES_CACHE = filtered[:15]
+    return _MATCHES_CACHE
+
+
+@app.post("/api/matches/analyze")
+def analyze_matches(req: AnalyzeRequest):
+    """Zwraca szczegółową analizę (probs + typy z kursami) dla wybranych meczów."""
+    global _MATCHES_CACHE
+    if not _MATCHES_CACHE:
+        _MATCHES_CACHE = _fetch_predictions()
+
+    id_set  = {str(i) for i in req.match_ids}
+    results = []
+    for m in _MATCHES_CACHE:
+        if str(m.get("id")) not in id_set:
+            continue
+        ml   = m.get("pred_ml") or {}
+        odds = m.get("odds") or {}
+
+        ph  = _to_pct(ml.get("prob_home_win"), 40.0)
+        pr  = _to_pct(ml.get("prob_draw"),     25.0)
+        pp  = _to_pct(ml.get("prob_away_win"), 35.0)
+        po  = _to_pct(ml.get("prob_over_25"),  55.0)
+        pbt = _to_pct(ml.get("prob_btts_yes"), 45.0)
+
+        # Normalizuj 1X2 do 100%
+        s12 = ph + pr + pp or 100.0
+        ph  = round(ph / s12 * 100, 1)
+        pr  = round(pr / s12 * 100, 1)
+        pp  = round(100.0 - ph - pr, 1)
+
+        # Podwójne szanse (implied odds)
+        def _dc_odds(a, b):
+            if not a or not b:
+                return None
+            return round(1 / (1/a + 1/b), 2)
+
+        tips = []
+        if odds.get("home"):
+            tips.append({"tip": "1",        "label": "1 – Gosp.",     "odds": odds["home"],              "prob": ph,        "color": "indigo"})
+        if odds.get("draw"):
+            tips.append({"tip": "X",        "label": "X – Remis",     "odds": odds["draw"],              "prob": pr,        "color": "slate"})
+        if odds.get("away"):
+            tips.append({"tip": "2",        "label": "2 – Gość",      "odds": odds["away"],              "prob": pp,        "color": "violet"})
+        dc1x = _dc_odds(odds.get("home"), odds.get("draw"))
+        if dc1x:
+            tips.append({"tip": "1X",       "label": "1X – Gosp./Rem.","odds": dc1x,                    "prob": round(ph + pr, 1), "color": "blue"})
+        dcx2 = _dc_odds(odds.get("draw"), odds.get("away"))
+        if dcx2:
+            tips.append({"tip": "X2",       "label": "X2 – Rem./Gość","odds": dcx2,                    "prob": round(pr + pp, 1), "color": "purple"})
+        if odds.get("over_2_5"):
+            tips.append({"tip": "Over 2.5", "label": "Over 2.5",      "odds": odds["over_2_5"],          "prob": po,        "color": "emerald"})
+        if odds.get("btts"):
+            tips.append({"tip": "BTTS",     "label": "Obie strzelą",  "odds": odds["btts"],              "prob": pbt,       "color": "amber"})
+
+        results.append({
+            "id": m["id"], "home": m["gosp"], "away": m["gosc"],
+            "liga": m.get("liga", ""), "data": m.get("data", ""), "godzina": m.get("godzina", ""),
+            "prob_home": ph, "prob_draw": pr, "prob_away": pp,
+            "prob_over": po, "prob_btts": pbt,
+            "tips": tips,
+        })
+    return results
+
+
+@app.post("/api/coupon/kelly")
+def calculate_kelly(req: KellyRequest):
+    """Oblicza stawkę Kelly Criterion dla akumulatora."""
+    import footstats.config as cfg
+    if not req.selections:
+        raise HTTPException(status_code=400, detail="Brak typów")
+
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT balance FROM bankroll_state WHERE id=1").fetchone()
+        bankroll = float(row["balance"]) if row else float(cfg.AGENT_BANKROLL)
+        frac_row = conn.execute("SELECT value FROM bot_settings WHERE key='kelly_fraction'").fetchone()
+        fraction = int(frac_row["value"]) if frac_row else cfg.AGENT_KELLY_FRACTION
+    finally:
+        conn.close()
+
+    total_odds = 1.0
+    win_prob   = 1.0
+    for s in req.selections:
+        total_odds *= s.odds
+        p = s.win_prob / 100.0 if s.win_prob > 1.0 else s.win_prob
+        win_prob   *= p
+
+    b = total_odds - 1.0
+    f_star = max((b * win_prob - (1.0 - win_prob)) / b, 0.0) if b > 0 else 0.0
+    stake  = round(f_star / fraction * bankroll, 2)
+    stake  = max(stake, 2.0)
+    stake  = min(stake, round(bankroll * 0.20, 2))
+
+    return {
+        "total_odds":    round(total_odds, 2),
+        "win_prob_pct":  round(win_prob * 100, 1),
+        "f_star_pct":    round(f_star * 100, 2),
+        "stake_pln":     stake,
+        "bankroll":      bankroll,
+        "kelly_fraction": fraction,
+    }
+
+
+@app.post("/api/coupon/place")
+def place_coupon(req: PlaceCouponRequest):
+    """Zapisuje kupon do DB i odejmuje stawkę z bankrolla."""
+    if req.stake_pln < 2.0:
+        raise HTTPException(status_code=400, detail="Minimalna stawka to 2.00 PLN")
+
+    conn = _get_conn()
+    try:
+        row = conn.execute("SELECT balance FROM bankroll_state WHERE id=1").fetchone()
+        balance = float(row["balance"]) if row else 0.0
+        if req.stake_pln > balance:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Niewystarczający bankroll ({balance:.2f} PLN)"
+            )
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        legs_json = json.dumps([
+            {"home": s.home, "away": s.away, "tip": s.tip,
+             "odds": s.odds, "decision_score": int(s.win_prob)}
+            for s in req.selections
+        ], ensure_ascii=False)
+
+        conn.execute("""
+            INSERT INTO coupons
+                (created_at, phase, status, kupon_type, legs_json,
+                 total_odds, stake_pln, payout_pln, match_date_first)
+            VALUES (?,?,?,?,?,?,?,?,?)
+        """, (now, "final", "ACTIVE", "accumulator", legs_json,
+              req.total_odds, req.stake_pln, None,
+              req.match_date or datetime.now().strftime("%Y-%m-%d")))
+
+        new_balance = round(balance - req.stake_pln, 2)
+        conn.execute(
+            "UPDATE bankroll_state SET balance=?, updated_at=? WHERE id=1",
+            (new_balance, now)
+        )
+        conn.execute("""
+            INSERT INTO bankroll_history (timestamp, change_pln, new_balance, type, description)
+            VALUES (?,?,?,?,?)
+        """, (now, -req.stake_pln, new_balance, "BET",
+              f"Kupon AI ({', '.join(s.tip for s in req.selections)})"))
+
+        conn.commit()
+        coupon_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    finally:
+        conn.close()
+
+    return {
+        "ok": True, "coupon_id": coupon_id,
+        "new_balance": new_balance, "stake_pln": req.stake_pln
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

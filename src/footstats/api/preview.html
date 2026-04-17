@@ -76,6 +76,35 @@
     }
     .settings-input:focus { outline: none; border-color: rgba(99,102,241,0.5); background: rgba(255,255,255,0.07); }
     .settings-input::placeholder { color: #475569; font-weight: 400; }
+    /* Wizard step pills */
+    .step-pill {
+      padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 700;
+      background: rgba(255,255,255,0.05); color: #475569; border: 1px solid rgba(255,255,255,0.06);
+      white-space: nowrap; transition: all 0.2s;
+    }
+    .step-pill.active { background: rgba(99,102,241,0.2); color: #818cf8; border-color: rgba(99,102,241,0.35); }
+    .step-pill.done   { background: rgba(52,211,153,0.12); color: #34d399; border-color: rgba(52,211,153,0.25); }
+    .step-connector { flex:1; height:1px; background: rgba(255,255,255,0.06); min-width:12px; }
+    .step-connector.done { background: rgba(52,211,153,0.3); }
+
+    /* Match checkbox card */
+    .match-card { cursor:pointer; transition: all 0.15s; }
+    .match-card:hover { border-color: rgba(99,102,241,0.3); background: rgba(99,102,241,0.04); }
+    .match-card.selected { border-color: rgba(99,102,241,0.5); background: rgba(99,102,241,0.08); }
+
+    /* Tip button */
+    .tip-btn {
+      padding: 6px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer;
+      border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);
+      color: #94a3b8; transition: all 0.15s; white-space: nowrap;
+    }
+    .tip-btn:hover { border-color: rgba(99,102,241,0.4); color: #c7d2fe; }
+    .tip-btn.selected-tip { background: rgba(99,102,241,0.2); border-color: rgba(99,102,241,0.6); color: #818cf8; }
+
+    /* Prob bar */
+    .prob-bar-bg { height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+    .prob-bar-fill { height:100%; border-radius:3px; transition:width 0.5s ease; }
+
     ::-webkit-scrollbar { width:5px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.08); border-radius:3px; }
@@ -101,6 +130,10 @@
       <div class="nav-item" id="nav-settings" onclick="showView('settings')">
         <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
         <span class="font-semibold text-sm">Ustawienia</span>
+      </div>
+      <div class="nav-item" id="nav-create" onclick="showView('create')">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        <span class="font-semibold text-sm">Stwórz Kupon</span>
       </div>
     </nav>
     <div class="p-4 bg-white/5 rounded-xl border border-white/5 mt-auto">
@@ -246,7 +279,7 @@
           <div class="space-y-4">
             <div>
               <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">Wersja systemu</label>
-              <input id="cfg-version" type="text" class="settings-input" placeholder="v3.0" />
+              <input id="cfg-version" type="text" class="settings-input opacity-50 cursor-not-allowed" placeholder="v3.0" readonly />
             </div>
             <div>
               <label class="block text-xs text-slate-500 uppercase tracking-wider mb-1">Próg Pewniaczka (%)</label>
@@ -283,6 +316,137 @@
           <p id="settings-save-msg" class="text-xs mt-3 hidden"></p>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ===== KREATOR KUPONU ===== -->
+    <div id="view-create" class="hidden">
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-1">Kreator Kuponu</h1>
+        <p class="text-slate-500 text-sm">Wybierz mecze, typuj, oblicz Kelly, postaw.</p>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="flex items-center gap-0 mb-10 select-none">
+        <div class="step-pill active" id="pill-1">1 Mecze</div>
+        <div class="step-connector" id="conn-1"></div>
+        <div class="step-pill" id="pill-2">2 Analiza</div>
+        <div class="step-connector" id="conn-2"></div>
+        <div class="step-pill" id="pill-3">3 Typuj</div>
+        <div class="step-connector" id="conn-3"></div>
+        <div class="step-pill" id="pill-4">4 Kelly</div>
+        <div class="step-connector" id="conn-4"></div>
+        <div class="step-pill" id="pill-5">5 Postaw</div>
+      </div>
+
+      <!-- KROK 1: Lista meczów -->
+      <div id="wiz-step-1">
+        <div id="wiz-matches-loading" class="flex items-center gap-3 py-8 text-slate-500 text-sm">
+          <div class="spinner" style="width:24px;height:24px;border-width:2px"></div> Pobieram mecze…
+        </div>
+        <div id="wiz-matches-list" class="space-y-3 hidden"></div>
+        <div class="mt-6 flex justify-end">
+          <button id="wiz-btn-analyze" onclick="wizAnalyze()"
+            class="hidden px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm rounded-xl transition-all flex items-center gap-2">
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Głęboka Analiza wybranych
+          </button>
+        </div>
+      </div>
+
+      <!-- KROK 2: Spinner analizy -->
+      <div id="wiz-step-2" class="hidden">
+        <div class="glass-card p-12 flex flex-col items-center gap-6 text-center">
+          <div class="spinner" style="width:52px;height:52px;border-width:3px"></div>
+          <div>
+            <p class="text-lg font-bold mb-1">Głęboka Analiza w toku…</p>
+            <p class="text-slate-500 text-sm">Skrapuję składy, H2H i predykcje ML. Chwilę…</p>
+          </div>
+          <div class="w-full max-w-xs">
+            <div class="h-1.5 bg-white/5 rounded-full overflow-hidden">
+              <div id="wiz-progress-bar" class="h-full bg-indigo-500 rounded-full transition-all duration-500" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KROK 3: Wybór typów -->
+      <div id="wiz-step-3" class="hidden space-y-6">
+        <p class="text-slate-400 text-sm">Kliknij <span class="text-indigo-400 font-semibold">jeden typ</span> dla każdego meczu. Niezaznaczone mecze zostaną pominięte.</p>
+        <div id="wiz-analysis-list" class="space-y-4"></div>
+        <div class="flex justify-between mt-6">
+          <button onclick="wizReset()" class="px-5 py-2.5 text-slate-400 hover:text-white text-sm font-semibold transition-all">← Zacznij od nowa</button>
+          <button onclick="wizKelly()" id="wiz-btn-kelly"
+            class="px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-sm rounded-xl transition-all">
+            Oblicz Kelly →
+          </button>
+        </div>
+      </div>
+
+      <!-- KROK 4: Stawka Kelly -->
+      <div id="wiz-step-4" class="hidden">
+        <div class="glass-card p-8 max-w-lg">
+          <h3 class="text-lg font-bold mb-6">Kalkulacja Kelly</h3>
+          <div id="wiz-kelly-details" class="space-y-3 mb-6"></div>
+          <div class="border-t border-white/10 pt-5">
+            <label class="block text-xs text-slate-500 uppercase tracking-wider mb-2">Stawka (PLN) — możesz zmienić</label>
+            <div class="flex gap-3">
+              <input id="wiz-stake-input" type="number" min="2" step="0.5"
+                class="settings-input flex-1" placeholder="5.00" />
+              <span class="flex items-center text-slate-400 text-sm font-semibold">PLN</span>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">Minimum 2.00 PLN · Max 20% bankrolla</p>
+          </div>
+          <div class="flex justify-between mt-6">
+            <button onclick="wizStep(3)" class="px-5 py-2.5 text-slate-400 hover:text-white text-sm font-semibold transition-all">← Wróć</button>
+            <button onclick="wizConfirm()"
+              class="px-6 py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm rounded-xl transition-all">
+              Przejdź do potwierdzenia →
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- KROK 5: Potwierdzenie -->
+      <div id="wiz-step-5" class="hidden">
+        <div class="glass-card p-8 max-w-lg">
+          <h3 class="text-lg font-bold mb-2">Podsumowanie kuponu</h3>
+          <p class="text-slate-500 text-xs mb-6">Sprawdź przed postawieniem.</p>
+          <div id="wiz-summary" class="space-y-3 mb-6"></div>
+          <div class="border-t border-white/10 pt-5 flex flex-col gap-3">
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">Łączny kurs</span>
+              <span class="font-bold text-xl" id="wiz-total-odds-display">—</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">Stawka</span>
+              <span class="font-bold text-xl text-indigo-400" id="wiz-stake-display">—</span>
+            </div>
+            <div class="flex justify-between text-sm">
+              <span class="text-slate-400">Potencjalna wygrana</span>
+              <span class="font-bold text-xl text-emerald-400" id="wiz-payout-display">—</span>
+            </div>
+          </div>
+          <p id="wiz-place-error" class="text-xs text-rose-400 mt-3 hidden"></p>
+          <div class="flex justify-between mt-6">
+            <button onclick="wizStep(4)" class="px-5 py-2.5 text-slate-400 hover:text-white text-sm font-semibold transition-all">← Wróć</button>
+            <button onclick="wizPlace()" id="wiz-btn-place"
+              class="px-8 py-3 bg-gradient-to-r from-indigo-500 to-emerald-500 hover:from-indigo-600 hover:to-emerald-600 text-white font-extrabold text-sm rounded-xl transition-all shadow-lg shadow-indigo-500/20">
+              🎯 ZAGRAJ!
+            </button>
+          </div>
+        </div>
+
+        <!-- Sukces -->
+        <div id="wiz-success" class="hidden glass-card p-10 max-w-lg text-center mt-4">
+          <div class="text-5xl mb-4">✅</div>
+          <h3 class="text-xl font-bold mb-2">Kupon postawiony!</h3>
+          <p id="wiz-success-msg" class="text-slate-400 text-sm mb-6"></p>
+          <button onclick="wizReset(); showView('dashboard'); reloadDashboard()"
+            class="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white font-bold text-sm rounded-xl transition-all">
+            Wróć do Dashboard
+          </button>
+        </div>
       </div>
     </div>
 
@@ -422,11 +586,28 @@
 
     // ---- navigation ----
     function showView(name) {
-      ['dashboard','history','settings'].forEach(v => {
+      ['dashboard','history','settings','create'].forEach(v => {
         document.getElementById('view-' + v).classList.toggle('hidden', v !== name);
         const nav = document.getElementById('nav-' + v);
         if (nav) nav.classList.toggle('active', v === name);
       });
+      if (name === 'create' && wiz.matches.length === 0) wizLoadMatches();
+    }
+
+    async function reloadDashboard() {
+      try {
+        const [statusRes, activeRes] = await Promise.all([
+          fetch('/api/status'), fetch('/api/coupons/active')
+        ]);
+        const status = await statusRes.json();
+        const active = await activeRes.json();
+        document.getElementById('bankroll-display').textContent = parseFloat(status.bankroll || 0).toFixed(2);
+        document.getElementById('active-count-display').textContent = active.length;
+        const roi = status.stats?.roi_pct ?? 0;
+        const roiEl = document.getElementById('roi-display');
+        roiEl.textContent = (roi >= 0 ? '+' : '') + roi + '%';
+        roiEl.className = `text-3xl font-bold mb-1 ${roi >= 0 ? 'text-emerald-400' : 'text-rose-400'}`;
+      } catch(_) {}
     }
 
     // ---- Chart ----
@@ -600,6 +781,307 @@
       document.getElementById('loading').classList.add('hidden');
       document.getElementById('view-dashboard').classList.remove('hidden');
     }
+
+    // ====================================================
+    // KREATOR KUPONU — stan i logika
+    // ====================================================
+    const wiz = {
+      step: 1,
+      matches: [],        // z /api/matches/today
+      selectedIds: new Set(),
+      analysis: [],       // z /api/matches/analyze
+      selections: [],     // [{match_id, home, away, tip, odds, win_prob}]
+      kelly: null,        // z /api/coupon/kelly
+      stakeOverride: null,
+    };
+
+    function wizStep(n) {
+      wiz.step = n;
+      [1,2,3,4,5].forEach(i => {
+        const el = document.getElementById('wiz-step-' + i);
+        if (el) el.classList.toggle('hidden', i !== n);
+        const pill = document.getElementById('pill-' + i);
+        if (pill) {
+          pill.classList.toggle('active', i === n);
+          pill.classList.toggle('done', i < n);
+        }
+        const conn = document.getElementById('conn-' + i);
+        if (conn) conn.classList.toggle('done', i < n);
+      });
+    }
+
+    async function wizLoadMatches() {
+      document.getElementById('wiz-matches-loading').classList.remove('hidden');
+      document.getElementById('wiz-matches-list').classList.add('hidden');
+      document.getElementById('wiz-btn-analyze').classList.add('hidden');
+      wiz.selectedIds.clear();
+      try {
+        const res = await fetch('/api/matches/today');
+        wiz.matches = await res.json();
+        _renderMatchList();
+      } catch(e) {
+        document.getElementById('wiz-matches-loading').innerHTML =
+          `<p class="text-rose-400 text-sm">Błąd: ${e.message}</p>`;
+      }
+    }
+
+    function _renderMatchList() {
+      const loading = document.getElementById('wiz-matches-loading');
+      const list    = document.getElementById('wiz-matches-list');
+      loading.classList.add('hidden');
+      list.classList.remove('hidden');
+      list.innerHTML = wiz.matches.map(m => `
+        <div class="match-card glass-card px-5 py-4 flex items-center gap-4"
+             id="mcard-${m.id}" onclick="wizToggleMatch('${m.id}')">
+          <div class="w-5 h-5 rounded border-2 border-white/20 flex items-center justify-center shrink-0 transition-all" id="mcheck-${m.id}">
+            <svg class="hidden w-3 h-3 text-indigo-400" id="mcheck-icon-${m.id}" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="font-bold text-sm text-slate-200">${m.gosp} <span class="text-slate-500 font-normal">vs</span> ${m.gosc}</p>
+            <p class="text-xs text-slate-500 mt-0.5">${m.liga} · ${m.data} ${m.godzina}</p>
+          </div>
+          <div class="text-xs text-slate-600 font-medium shrink-0">${m.data === new Date().toISOString().slice(0,10) ? '🟢 dziś' : '📅 jutro'}</div>
+        </div>
+      `).join('');
+    }
+
+    function wizToggleMatch(id) {
+      const card  = document.getElementById('mcard-' + id);
+      const check = document.getElementById('mcheck-' + id);
+      const icon  = document.getElementById('mcheck-icon-' + id);
+      if (wiz.selectedIds.has(id)) {
+        wiz.selectedIds.delete(id);
+        card.classList.remove('selected');
+        check.classList.remove('border-indigo-500', 'bg-indigo-500/20');
+        icon.classList.add('hidden');
+      } else {
+        wiz.selectedIds.add(id);
+        card.classList.add('selected');
+        check.classList.add('border-indigo-500', 'bg-indigo-500/20');
+        icon.classList.remove('hidden');
+      }
+      const btn = document.getElementById('wiz-btn-analyze');
+      wiz.selectedIds.size > 0 ? btn.classList.remove('hidden') : btn.classList.add('hidden');
+    }
+
+    async function wizAnalyze() {
+      if (wiz.selectedIds.size === 0) return;
+      wizStep(2);
+
+      // Animuj pasek postępu
+      const bar = document.getElementById('wiz-progress-bar');
+      let pct = 0;
+      const ticker = setInterval(() => {
+        pct = Math.min(pct + (pct < 70 ? 8 : 2), 90);
+        bar.style.width = pct + '%';
+      }, 200);
+
+      try {
+        const res  = await fetch('/api/matches/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ match_ids: [...wiz.selectedIds] })
+        });
+        wiz.analysis = await res.json();
+        wiz.selections = [];
+        clearInterval(ticker);
+        bar.style.width = '100%';
+        await new Promise(r => setTimeout(r, 400));
+        _renderAnalysis();
+        wizStep(3);
+      } catch(e) {
+        clearInterval(ticker);
+        wizStep(1);
+        alert('Błąd analizy: ' + e.message);
+      }
+    }
+
+    const _COLOR_MAP = {
+      indigo:  ['rgba(99,102,241,0.15)',  '#818cf8'],
+      slate:   ['rgba(100,116,139,0.15)', '#94a3b8'],
+      violet:  ['rgba(139,92,246,0.15)',  '#a78bfa'],
+      blue:    ['rgba(59,130,246,0.15)',  '#60a5fa'],
+      purple:  ['rgba(168,85,247,0.15)',  '#c084fc'],
+      emerald: ['rgba(52,211,153,0.15)',  '#34d399'],
+      amber:   ['rgba(251,191,36,0.15)',  '#fbbf24'],
+    };
+
+    function _renderAnalysis() {
+      const list = document.getElementById('wiz-analysis-list');
+      list.innerHTML = wiz.analysis.map(m => {
+        const tipBtns = m.tips.map(t => {
+          const [bg, tc] = _COLOR_MAP[t.color] || _COLOR_MAP.slate;
+          return `
+            <button class="tip-btn" id="tip-${m.id}-${t.tip.replace(/\s/g,'_')}"
+                    onclick="wizSelectTip('${m.id}','${t.tip}',${t.odds},${t.prob},'${m.home}','${m.away}')"
+                    title="${t.label}">
+              <span class="block font-bold">${t.tip}</span>
+              <span class="block text-[10px] mt-0.5 opacity-70">@${fmt(t.odds)}</span>
+              <span class="block text-[10px] opacity-60">${t.prob}%</span>
+            </button>`;
+        }).join('');
+
+        return `
+          <div class="glass-card p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+              <div class="flex-1">
+                <p class="font-bold text-slate-200">${m.home} <span class="text-slate-500 font-normal">vs</span> ${m.away}</p>
+                <p class="text-xs text-slate-500">${m.liga} · ${m.data} ${m.godzina}</p>
+              </div>
+              <span id="sel-label-${m.id}" class="text-xs text-slate-600 font-semibold">— nie wybrano —</span>
+            </div>
+            <!-- Prob bars -->
+            <div class="grid grid-cols-3 gap-3 mb-4 text-center text-xs">
+              <div>
+                <p class="text-slate-500 mb-1 font-medium">Gosp. (${m.prob_home}%)</p>
+                <div class="prob-bar-bg"><div class="prob-bar-fill bg-indigo-500" style="width:${m.prob_home}%"></div></div>
+              </div>
+              <div>
+                <p class="text-slate-500 mb-1 font-medium">Remis (${m.prob_draw}%)</p>
+                <div class="prob-bar-bg"><div class="prob-bar-fill bg-slate-400" style="width:${m.prob_draw}%"></div></div>
+              </div>
+              <div>
+                <p class="text-slate-500 mb-1 font-medium">Gość (${m.prob_away}%)</p>
+                <div class="prob-bar-bg"><div class="prob-bar-fill bg-violet-500" style="width:${m.prob_away}%"></div></div>
+              </div>
+            </div>
+            <!-- Tip buttons -->
+            <div class="flex flex-wrap gap-2">${tipBtns}</div>
+          </div>`;
+      }).join('');
+    }
+
+    function wizSelectTip(matchId, tip, odds, prob, home, away) {
+      // Odznacz poprzedni typ dla tego meczu
+      const prev = wiz.selections.find(s => s.match_id === matchId);
+      if (prev) {
+        const prevBtn = document.getElementById(`tip-${matchId}-${prev.tip.replace(/\s/g,'_')}`);
+        if (prevBtn) prevBtn.classList.remove('selected-tip');
+        wiz.selections = wiz.selections.filter(s => s.match_id !== matchId);
+      }
+      // Zaznacz nowy
+      const btn = document.getElementById(`tip-${matchId}-${tip.replace(/\s/g,'_')}`);
+      if (btn) btn.classList.add('selected-tip');
+      wiz.selections.push({ match_id: matchId, home, away, tip, odds, win_prob: prob });
+      // Zaktualizuj label
+      const label = document.getElementById('sel-label-' + matchId);
+      if (label) label.textContent = `✓ ${tip} @${fmt(odds)}`;
+    }
+
+    async function wizKelly() {
+      if (wiz.selections.length === 0) {
+        alert('Wybierz co najmniej jeden typ przed obliczeniem Kelly!');
+        return;
+      }
+      wizStep(4);
+      try {
+        const res = await fetch('/api/coupon/kelly', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ selections: wiz.selections })
+        });
+        wiz.kelly = await res.json();
+        _renderKelly();
+      } catch(e) {
+        alert('Błąd Kelly: ' + e.message);
+        wizStep(3);
+      }
+    }
+
+    function _renderKelly() {
+      const k = wiz.kelly;
+      const rows = [
+        ['Łączny kurs',        `@${fmt(k.total_odds)}`],
+        ['Szacowana wygrana%', `${k.win_prob_pct}%`],
+        ['Kelly f*',           `${k.f_star_pct}% bankrolla`],
+        ['Fractional Kelly',   `÷${k.kelly_fraction}`],
+        ['Bankroll',           `${fmt(k.bankroll)} PLN`],
+        ['Zalecana stawka',    `<span class="text-emerald-400 font-extrabold text-lg">${fmt(k.stake_pln)} PLN</span>`],
+      ];
+      document.getElementById('wiz-kelly-details').innerHTML = rows.map(([l,v]) => `
+        <div class="flex justify-between items-center text-sm border-b border-white/5 py-2">
+          <span class="text-slate-400">${l}</span><span class="font-bold">${v}</span>
+        </div>`).join('');
+      document.getElementById('wiz-stake-input').value = k.stake_pln;
+    }
+
+    function wizConfirm() {
+      const stake = parseFloat(document.getElementById('wiz-stake-input').value) || wiz.kelly?.stake_pln || 2;
+      wiz.stakeOverride = Math.max(stake, 2.0);
+      const totalOdds = wiz.selections.reduce((acc, s) => acc * s.odds, 1.0);
+      const payout    = round2(totalOdds * wiz.stakeOverride);
+
+      document.getElementById('wiz-total-odds-display').textContent = `@${fmt(totalOdds)}`;
+      document.getElementById('wiz-stake-display').textContent      = `${fmt(wiz.stakeOverride)} PLN`;
+      document.getElementById('wiz-payout-display').textContent     = `${fmt(payout)} PLN`;
+
+      document.getElementById('wiz-summary').innerHTML = wiz.selections.map(s => `
+        <div class="flex justify-between items-center text-sm border-b border-white/5 py-2">
+          <div>
+            <p class="font-semibold text-slate-200 text-xs">${s.home} vs ${s.away}</p>
+            <p class="text-slate-500 text-xs">${s.tip} · szansa ${s.win_prob}%</p>
+          </div>
+          <span class="font-bold text-indigo-300">@${fmt(s.odds)}</span>
+        </div>`).join('');
+
+      document.getElementById('wiz-success').classList.add('hidden');
+      document.getElementById('wiz-place-error').classList.add('hidden');
+      wizStep(5);
+    }
+
+    async function wizPlace() {
+      const btn = document.getElementById('wiz-btn-place');
+      const err = document.getElementById('wiz-place-error');
+      btn.disabled = true;
+      btn.textContent = 'Przetwarzam…';
+      err.classList.add('hidden');
+
+      const totalOdds = round2(wiz.selections.reduce((acc, s) => acc * s.odds, 1.0));
+      try {
+        const res = await fetch('/api/coupon/place', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            selections:  wiz.selections,
+            total_odds:  totalOdds,
+            stake_pln:   wiz.stakeOverride,
+            match_date:  new Date().toISOString().slice(0,10)
+          })
+        });
+        if (!res.ok) {
+          const e = await res.json();
+          throw new Error(e.detail || 'Nieznany błąd');
+        }
+        const data = await res.json();
+        document.getElementById('wiz-success-msg').textContent =
+          `Kupon #${data.coupon_id} aktywny. Nowy bankroll: ${fmt(data.new_balance)} PLN.`;
+        document.getElementById('wiz-success').classList.remove('hidden');
+        document.querySelector('#wiz-step-5 .glass-card').classList.add('hidden');
+        // Odśwież bankroll w headerze dashboardu
+        document.getElementById('bankroll-display').textContent = fmt(data.new_balance);
+        document.getElementById('settings-bankroll-current').textContent = fmt(data.new_balance);
+      } catch(e) {
+        err.textContent = 'Błąd: ' + e.message;
+        err.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🎯 ZAGRAJ!';
+      }
+    }
+
+    function wizReset() {
+      wiz.selectedIds.clear();
+      wiz.analysis = [];
+      wiz.selections = [];
+      wiz.kelly = null;
+      wiz.stakeOverride = null;
+      wizStep(1);
+      document.getElementById('wiz-success').classList.add('hidden');
+      document.querySelector('#wiz-step-5 .glass-card')?.classList.remove('hidden');
+      wizLoadMatches();
+    }
+
+    function round2(v) { return Math.round(v * 100) / 100; }
 
     // ---- Fill settings form ----
     function _fillSettings(s) {
