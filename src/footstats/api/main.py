@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import List, Dict, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 
 app = FastAPI(title="FootStats API", version="1.0")
@@ -68,6 +68,11 @@ class SettingsUpdate(BaseModel):
     kelly_w1_multipliers: Optional[str] = None  # np. "0.7/1.0/1.1"
 
 # --- Endpointy ---
+
+@app.get("/")
+def root():
+    """Przekierowanie z / na /preview."""
+    return RedirectResponse(url="/preview")
 
 @app.get("/preview")
 def serve_preview():

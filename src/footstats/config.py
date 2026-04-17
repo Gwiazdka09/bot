@@ -8,7 +8,7 @@ from rich.prompt import Prompt, Confirm
 # ================================================================
 #  STALE
 # ================================================================
-VERSION         = "v3.0 RAG + Kelly Calibration"
+VERSION         = "v3.1 Interaktywny Kreator"
 MAX_GOLE        = 8
 OSTATNIE_N      = 15
 BONUS_DOMOWY    = 1.15
