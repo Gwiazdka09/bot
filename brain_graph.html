@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>FootStats Second Mind - Graph View</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- VIS-NETWORK CDN -->
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/vis-network/standalone/umd/vis-network-custom.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1a2e 100%);
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        #header {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            background: rgba(26, 26, 46, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #FF1493;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-width: 350px;
+        }
+
+        #header h1 {
+            color: #FF1493;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+
+        #header p {
+            color: #a0a0a0;
+            font-size: 12px;
+            line-height: 1.5;
+            margin-bottom: 10px;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+            background: rgba(26, 26, 46, 0.95);
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #4169E1;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            max-width: 250px;
+            font-size: 12px;
+        }
+
+        .legend h3 {
+            color: #4169E1;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #mynetwork {
+            width: 100%;
+            height: 100vh;
+            background: radial-gradient(circle at 20% 50%, rgba(147, 112, 219, 0.1) 0%, transparent 50%);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .vis-network {
+            background: transparent !important;
+        }
+
+        .vis-label {
+            color: #e0e0e0;
+            font-weight: normal;
+            text-align: center;
+        }
+
+        .vis-tooltip {
+            background: rgba(26, 26, 46, 0.95);
+            border: 1px solid #FF1493;
+            color: #e0e0e0;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 12px;
+            max-width: 200px;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div id="mynetwork"></div>
+
+    <div id="header">
+        <h1>Second Mind</h1>
+        <p>FootStats v3.2 — Interaktywna mapa przepływu danych i AI-feedback loop</p>
+        <p style="color: #FF1493; font-weight: bold;">RAG Memory: ai_feedback table</p>
+    </div>
+
+    <div class="legend">
+        <h3>LEGENDA</h3>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #FFD700;"></div>
+            <span>Agenty (Orchestration)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #9370DB;"></div>
+            <span>AI/RAG/LLM</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #4169E1;"></div>
+            <span>Frontend/API</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #32CD32;"></div>
+            <span>Database (Tables)</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #FF1493;"></div>
+            <span style="font-weight: bold;">RAG Memory</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #FF8C00;"></div>
+            <span>Kelly Calibration</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background-color: #808080;"></div>
+            <span>Configuration</span>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Nodes data
+        var nodesData = [{"id": "daily_agent", "label": "daily_agent.py\n(MAIN)", "color": "#FFD700", "title": "G\u0142\u00f3wny orchestrator\nKROK 0: analizuj_porazki()\nKROK 1: Groq\nKROK 2: save coupon", "size": 40, "font": {"size": 16, "bold": "true"}, "shape": "dot"}, {"id": "evening_agent", "label": "evening_agent.py\n(SETTLEMENT)", "color": "#FFC700", "title": "Zamykanie kupon\u00f3w ACTIVE\u2192WIN/LOSE\nUpdate coupons table", "size": 35, "font": {"size": 14}, "shape": "dot"}, {"id": "analyzer", "label": "analyzer.py\n(LLM)", "color": "#9370DB", "title": "Groq llama-3.3-70b\nMain coupon generation\nReads ai_feedback for lessons", "size": 40, "font": {"size": 16, "bold": "true"}, "shape": "dot"}, {"id": "post_match_analyzer", "label": "post_match_analyzer.py\n(RAG)", "color": "#BA55D3", "title": "AI Feedback Loop (Etap 7)\nGeneruje wnioski z przegranym kupon\u00f3w\nWpisuje do ai_feedback table", "size": 35, "font": {"size": 13}, "shape": "dot"}, {"id": "trainer", "label": "trainer.py\n(TRAINING)", "color": "#DA70D6", "title": "RAG Knowledge Base Management\nOptional fine-tuning support", "size": 30, "font": {"size": 12}, "shape": "dot"}, {"id": "api_main", "label": "api/main.py\n(FastAPI)", "color": "#4169E1", "title": "REST API + Dashboard\nServes preview.html\nReads live data from DB", "size": 35, "font": {"size": 14}, "shape": "dot"}, {"id": "preview", "label": "preview.html\n(Frontend)", "color": "#1E90FF", "title": "Interactive Dashboard\nShows coupons, settlement status\nAccordion history", "size": 30, "font": {"size": 12}, "shape": "dot"}, {"id": "coupons_db", "label": "coupons\n(TABLE)", "color": "#32CD32", "title": "Kupony: status, stake, odds\nColumns: id, status, amount, legs", "size": 35, "font": {"size": 13}, "shape": "dot"}, {"id": "predictions_db", "label": "predictions\n(TABLE)", "color": "#3CB371", "title": "Wyniki mecz\u00f3w\nColumns: match_id, result, xG, lambda", "size": 30, "font": {"size": 12}, "shape": "dot"}, {"id": "ai_feedback_db", "label": "ai_feedback\n(RAG MEMORY)", "color": "#FF1493", "title": "RAG Memory \u2014 Wnioski z pora\u017cek\nStored lessons from post_match_analyzer\nRetrieved for prompt context", "size": 40, "font": {"size": 14, "bold": "true", "color": "white"}, "shape": "dot", "borderWidth": 3}, {"id": "db_main", "label": "footstats_backtest.db\n(SQLite)", "color": "#228B22", "title": "Main database file\nAll tables connected", "size": 32, "font": {"size": 12}, "shape": "dot"}, {"id": "config", "label": "config.py\n(CONFIG)", "color": "#808080", "title": "Environment variables\nAPI keys, database path, settings", "size": 28, "font": {"size": 11}, "shape": "dot"}, {"id": "backtest", "label": "backtest.py\n(BACKTEST)", "color": "#FF8C00", "title": "Historical validation\nKelly calibration\nWalk-forward analysis", "size": 30, "font": {"size": 12}, "shape": "dot"}, {"id": "calibration", "label": "calibration.py\n(KELLY)", "color": "#FF7F50", "title": "Kelly Criterion (Etap 6)\nHit-rate multiplier (0.7/1.0/1.1)\nForm streak override", "size": 28, "font": {"size": 11}, "shape": "dot"}, {"id": "kelly", "label": "kelly.py\n(KELLY MATH)", "color": "#FFA500", "title": "Kelly formula implementation\nStake calculation", "size": 25, "font": {"size": 10}, "shape": "dot"}, {"id": "results_updater", "label": "results_updater.py\n(RESULTS)", "color": "#6495ED", "title": "Update match results\nPopulate predictions table\nTrigger evening_agent", "size": 30, "font": {"size": 12}, "shape": "dot"}, {"id": "data_fetcher", "label": "data_fetcher.py\n(FETCH)", "color": "#87CEEB", "title": "Fetch historical data\nAPI Football integration\nLeague fixtures", "size": 28, "font": {"size": 11}, "shape": "dot"}];
+
+        // Edges data
+        var edgesData = [{"from": "daily_agent", "to": "analyzer", "title": "KROK 1: Send form + lessons \u2192 Groq LLM", "color": "#9370DB", "width": 4, "arrows": "to"}, {"from": "analyzer", "to": "coupons_db", "title": "KROK 2: Write generated coupon", "color": "#32CD32", "width": 3, "arrows": "to"}, {"from": "analyzer", "to": "ai_feedback_db", "title": "Read lessons (WNIOSKI Z OSTATNICH PORA\u017bEK)", "color": "#FF1493", "width": 3, "dashes": true, "arrows": "to"}, {"from": "post_match_analyzer", "to": "ai_feedback_db", "title": "ETAP 7: Write lesson from lost coupon", "color": "#FF1493", "width": 3, "arrows": "to"}, {"from": "daily_agent", "to": "post_match_analyzer", "title": "KROK 0b: Trigger after results update", "color": "#DA70D6", "width": 3, "arrows": "to"}, {"from": "evening_agent", "to": "coupons_db", "title": "Settlement: ACTIVE\u2192WIN/LOSE", "color": "#FFD700", "width": 3, "arrows": "to"}, {"from": "evening_agent", "to": "predictions_db", "title": "Read match results", "color": "#3CB371", "width": 2, "dashes": true, "arrows": "to"}, {"from": "results_updater", "to": "predictions_db", "title": "Populate match results", "color": "#6495ED", "width": 2, "arrows": "to"}, {"from": "coupons_db", "to": "db_main", "title": "Part of main database", "color": "#228B22", "width": 1, "dashes": true}, {"from": "predictions_db", "to": "db_main", "title": "Part of main database", "color": "#228B22", "width": 1, "dashes": true}, {"from": "ai_feedback_db", "to": "db_main", "title": "Part of main database", "color": "#228B22", "width": 2, "dashes": true}, {"from": "api_main", "to": "coupons_db", "title": "Read live coupon data", "color": "#4169E1", "width": 2, "dashes": true}, {"from": "api_main", "to": "preview", "title": "Serve HTML + JSON endpoints", "color": "#4169E1", "width": 2, "arrows": "to"}, {"from": "daily_agent", "to": "config", "title": "Read environment", "color": "#808080", "width": 1, "dashes": true}, {"from": "analyzer", "to": "config", "title": "Read API keys", "color": "#808080", "width": 1, "dashes": true}, {"from": "evening_agent", "to": "config", "title": "Read settings", "color": "#808080", "width": 1, "dashes": true}, {"from": "api_main", "to": "config", "title": "Read config", "color": "#808080", "width": 1, "dashes": true}, {"from": "daily_agent", "to": "calibration", "title": "Apply Kelly multiplier to stakes", "color": "#FF8C00", "width": 2, "arrows": "to"}, {"from": "calibration", "to": "kelly", "title": "Calculate stake", "color": "#FFA500", "width": 1, "arrows": "to"}, {"from": "backtest", "to": "calibration", "title": "Provide hit-rate thresholds", "color": "#FF7F50", "width": 1, "dashes": true}, {"from": "trainer", "to": "ai_feedback_db", "title": "Optional: Fine-tune from feedback", "color": "#DA70D6", "width": 1, "dashes": true}];
+
+        // Create vis network objects
+        var nodes = new vis.DataSet(nodesData);
+        var edges = new vis.DataSet(edgesData);
+
+        var container = document.getElementById('mynetwork');
+        var data = {
+            nodes: nodes,
+            edges: edges
+        };
+
+        var options = {
+            physics: {
+                enabled: true,
+                barnesHut: {
+                    gravitationalConstant: -28000,
+                    centralGravity: 0.3,
+                    springLength: 250,
+                    springConstant: 0.04
+                },
+                maxVelocity: 50,
+                minVelocity: 0.75,
+                solver: 'barnesHut',
+                timestep: 0.5,
+                stabilization: {iterations: 150}
+            },
+            interaction: {
+                hover: true,
+                navigationButtons: true,
+                keyboard: true,
+                zoomView: true,
+                dragView: true
+            },
+            nodes: {
+                font: {
+                    color: '#e0e0e0',
+                    size: 14,
+                    face: 'Arial'
+                },
+                borderWidth: 2,
+                borderWidthSelected: 3,
+                shadow: {
+                    enabled: true,
+                    color: 'rgba(0, 0, 0, 0.5)',
+                    size: 10,
+                    x: 5,
+                    y: 5
+                }
+            },
+            edges: {
+                color: {inherit: 'from'},
+                font: {
+                    color: '#a0a0a0',
+                    size: 11,
+                    align: 'middle'
+                },
+                smooth: {
+                    type: 'continuous',
+                    forceDirection: 'none'
+                },
+                arrows: {
+                    to: {enabled: true, scaleFactor: 0.3}
+                },
+                shadow: {
+                    enabled: false
+                }
+            }
+        };
+
+        // Create the network
+        var network = new vis.Network(container, data, options);
+
+        // Fit the network to the window on load
+        network.fit();
+
+        // Log debug info
+        console.log('Network loaded. Nodes: ' + nodes.length + ', Edges: ' + edges.length);
+    </script>
+</body>
+</html>

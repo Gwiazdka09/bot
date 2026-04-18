@@ -360,6 +360,11 @@ class PlaceCouponRequest(BaseModel):
     match_date: Optional[str] = None
 
 
+class SettleRequest(BaseModel):
+    days_back: Optional[int] = 3
+    dry_run: Optional[bool] = False
+
+
 @app.get("/api/matches/today")
 def get_matches_today():
     """Zwraca mecze na dziś/jutro z predykcjami ML (Bzzoiro lub mock)."""
@@ -531,6 +536,48 @@ def place_coupon(req: PlaceCouponRequest):
         "ok": True, "coupon_id": coupon_id,
         "new_balance": new_balance, "stake_pln": req.stake_pln
     }
+
+
+@app.post("/api/coupons/settle")
+def settle_coupons(req: SettleRequest):
+    """
+    Rozlicza ACTIVE kupony z fallback na FlashScore.
+
+    Parametry:
+        days_back: Ile dni wstecz sprawdzać (domyślnie 3)
+        dry_run: Czy to test bez faktycznej zmiany bazy (domyślnie False)
+
+    Zwraca:
+        {
+            "ok": bool,
+            "settled": int,      # liczba rozliczonych kuponów
+            "partial": int,      # liczba kuponów czekających na wyniki
+            "errors": int,       # liczba błędów
+            "message": str
+        }
+    """
+    try:
+        from footstats.core.coupon_settlement import settle_active_coupons
+
+        stats = settle_active_coupons(
+            days_back=req.days_back or 3,
+            dry_run=req.dry_run or False,
+            verbose=True,
+        )
+
+        return {
+            "ok": True,
+            "settled": stats.get("settled", 0),
+            "partial": stats.get("partial", 0),
+            "errors": stats.get("errors", 0),
+            "message": f"Rozliczono {stats.get('settled', 0)}, "
+                      f"częściowych {stats.get('partial', 0)}, "
+                      f"błędów {stats.get('errors', 0)}",
+        }
+    except Exception as e:
+        import logging
+        logging.error("Błąd POST /api/coupons/settle: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
