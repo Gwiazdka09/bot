@@ -655,17 +655,29 @@ def main():
         zdarzenia_db = kupon_a_db.get("zdarzenia", [])
         kurs_db = kupon_a_db.get("kurs_laczny", 1.0) or 1.0
         if zdarzenia_db:
-            cid = _zapisz_kupon_do_db(
-                zdarzenia_db,
-                phase=args.faza,
-                groq_resp=dane.get("_raw", ""),
-                stake=args.stawka,
-                total_odds=kurs_db,
-            )
-            if cid:
-                console.print(f"[green]✅ Kupon zapisany do DB — ID: {cid} | faza: {args.faza}[/green]")
-                draft_legs = zdarzenia_db
-                draft_odds = kurs_db
+            # Sprawdzenie decision_score PRZED zapisem
+            avg_score = int(sum(z.get("decision_score", 0) for z in zdarzenia_db) / max(len(zdarzenia_db), 1))
+            from footstats.core.decision_score import PROG_FINAL, PROG_DRAFT
+            threshold = PROG_FINAL if args.faza == "final" else PROG_DRAFT
+
+            if avg_score < threshold:
+                console.print(
+                    f"[red]❌ ODRZUCONO: decision_score {avg_score}/{threshold} poniżej progu "
+                    f"({args.faza.upper()})[/red]"
+                )
+                console.print(f"[dim]Kupon nie został zapisany do bazy danych[/dim]")
+            else:
+                cid = _zapisz_kupon_do_db(
+                    zdarzenia_db,
+                    phase=args.faza,
+                    groq_resp=dane.get("_raw", ""),
+                    stake=args.stawka,
+                    total_odds=kurs_db,
+                )
+                if cid:
+                    console.print(f"[green]✅ Kupon zapisany do DB — ID: {cid} | faza: {args.faza}[/green]")
+                    draft_legs = zdarzenia_db
+                    draft_odds = kurs_db
     elif args.dry_run and args.faza:
         console.print("[yellow]DRY-RUN: pominięto zapis kuponu do DB[/yellow]")
 

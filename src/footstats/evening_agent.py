@@ -177,6 +177,7 @@ def run_evening_agent(date_str: str | None = None) -> dict:
     """
     Weryfikuje wyniki kuponów dla danej daty.
     Zwraca dict: {checked, won, lost, partial, active}.
+    Uruchamiany o 23:00 przez Task Scheduler — automatyczne rozliczanie kuponu.
     """
     load_dotenv()
     api_key = os.getenv("APISPORTS_KEY", "").strip()
@@ -185,7 +186,10 @@ def run_evening_agent(date_str: str | None = None) -> dict:
         return {}
 
     date_str = date_str or datetime.now().strftime("%Y-%m-%d")
-    console.rule(f"[bold cyan]Evening Agent — {date_str}[/bold cyan]")
+    from datetime import datetime as dt
+    now = dt.now().strftime("%Y-%m-%d %H:%M:%S")
+    console.rule(f"[bold cyan]Evening Agent START — {date_str} ({now})[/bold cyan]")
+    console.print(f"[dim]Proces: Automatyczne rozliczanie kuponów (scheduled @ 23:00)[/dim]")
 
     init_coupon_tables()
     init_db()

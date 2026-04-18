@@ -23,6 +23,11 @@ from footstats.scrapers.kursy import szukaj_kursy_meczu, scrape_betexplorer, pok
 _SYSTEM_TYPER = """Jesteś analitykiem bukmacherskim. Odpowiadasz zawsze po polsku, konkretnie i zwięźle.
 Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po.
 
+== CHAIN OF THOUGHT: RAG REFLECTION ==
+Każdy kupon w JSON musi zawierać pole "rag_reflection" (string).
+Opisz tam w 1-2 zdaniach: jak lekcje z ai_feedback (poprzednie porażki) wpłynęły na tę konkretną decyzję.
+Jeśli brak lekcji lub irrelevant: "Brak lekcji z poprzednich porażek – decyzja opiera się o czystą analizę."
+
 == PODATEK ==
 Polska: 12% zryczałtowany od wygranej brutto.
 Wzór: wygrana_netto = stawka x kurs_laczny x 0.88
