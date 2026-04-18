@@ -103,7 +103,7 @@ def settle_active_coupons(
     Returns:
         {"settled": N, "partial": M, "errors": K}
     """
-    from footstats.core.coupon_tracker import _connect, init_db
+    from footstats.core.backtest import _connect, init_db
     from footstats.scrapers.results_updater import _get_api_key, _znajdz_wynik
     from footstats.scrapers.flashscore_results import get_match_result
 
@@ -117,7 +117,7 @@ def settle_active_coupons(
             """SELECT id, legs_json, total_odds, stake_pln, match_date_first
                FROM coupons
                WHERE status = 'ACTIVE'
-               AND date_created < ?""",
+               AND created_at < ?""",
             (today.isoformat(),),
         ).fetchall()
 
