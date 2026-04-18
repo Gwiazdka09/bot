@@ -40,3 +40,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "footstats.data" = ["*.md", "*.json", "*.csv"]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: unit tests (fast, no external dependencies)",
+    "integration: integration tests (may require network or credentials)",
+    "slow: slow tests",
+]
+testpaths = ["tests"]
+python_files = "test_*.py"
