@@ -80,16 +80,19 @@ F:\bot\
 _(brak aktywnych blokerów)_
 
 ### Priorytet ŚREDNI
-- [ ] **BetBuilder Superbet** — Playwright login, scraper SuperSocial, `scrapers/superbet.py`
-- [ ] **Test integracji Telegram** — `tests/test_telegram.py` wysyła testową wiadomość (weryfikacja tokenu i uprawnień bota)
+- [x] **BetBuilder Superbet** — Playwright login, scraper SuperSocial (✅ ISTNIEJE, commit `8e40571`)
 
 ### Priorytet NISKI
-- [ ] **Etap 5 (JSON export)** ← przeniesiony z ŚREDNIEGO (nie blokuje nic)
-- [ ] Audyt i usunięcie `legacy/`
 - [ ] Langfuse LLM Observability (śledzenie tokenów Groq)
 - [x] ~~**Etap 7 (RAG)**~~ — **GOTOWE** (`ai_feedback` → wstrzykiwane w prompt Groq)
 
 ## DONE — ukończone
+
+### Testowanie i eksport danych (v3.2 — 2026-04-18)
+- ✅ **Test integracji Telegram** — `tests/test_telegram.py` z 8 testami (2 unit, 6 integration) — commit `927a660`
+- ✅ **Etap 5 (JSON export)** — `src/footstats/export/json_export.py` z 4 funkcjami (kupony, bankroll, AI feedback, raport dzienny) — commit `927a660`
+- ✅ **Audyt legacy/** — usunięto `legacy/footstats_v2.7_monolith.py` i `legacy/golazo_bot.py` z gita — commit `927a660`
+- ✅ **Pytest markers** — zaktualizowano `pyproject.toml` (unit, integration, slow markers) — commit `927a660`
 
 ### Veryfikacja i integracja (v3.1-3.2)
 - ✅ **Weryfikacja harmonogramu** — `docs/scheduler_setup.md` + `scripts/` z `silent_run.vbs` (commit 566c822)
