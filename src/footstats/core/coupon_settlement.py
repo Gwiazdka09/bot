@@ -151,8 +151,9 @@ def settle_active_coupons(
             pass
 
         leg_results: list[int | None] = []
+        any_leg_lost = False  # Flaga dla AKO: wystarczy JEDEN przegrany, aby cały kupon przegrał
 
-        for leg in legs:
+        for leg_idx, leg in enumerate(legs):
             home = leg.get("home") or leg.get("home_team") or ""
             away = leg.get("away") or leg.get("away_team") or ""
             mecz = leg.get("mecz", "")
@@ -198,12 +199,46 @@ def settle_active_coupons(
                 if verbose:
                     symbol = "✓" if correct == 1 else ("✗" if correct == 0 else "?")
                     print(f"    [{symbol}] {home} vs {away} → {wynik} (tip: {tip})")
+
+                # ⚡ REGUŁA AKO: Jeśli JAKIKOLWIEK leg przegrał (correct == 0),
+                # cały kupon natychmiast przegrywa — nie czekamy na pozostałe
+                if correct == 0:
+                    any_leg_lost = True
+                    if verbose:
+                        print(f"    [LOSE] Leg #{leg_idx + 1} przegrany — cały kupon AKO przegrywa!")
+                    break  # Przerywamy pętlę, bo cały kupon jest już przegrany
             else:
                 leg_results.append(None)
                 if verbose:
                     print(f"    [NOT FOUND] {home} vs {away} ({match_date[:10]})")
 
         # Oceń kupon
+        if any_leg_lost:
+            # ⚡ AKO RULE: Wystarczy JEDEN leg LOSE, aby cały kupon był LOSE
+            new_status = "LOSE"
+            payout = 0.0
+            roi = -100.0
+
+            if verbose:
+                tag = "DRY" if dry_run else "SETTLE"
+                print(f"  [{tag}] Kupon #{coupon_id} → {new_status} | wypłata: {payout} PLN | ROI: {roi}%\n")
+
+            if not dry_run:
+                try:
+                    with _connect() as conn:
+                        conn.execute(
+                            "UPDATE coupons SET status=?, payout_pln=?, roi_pct=? WHERE id=?",
+                            (new_status, payout, roi, coupon_id),
+                        )
+                    _send_to_rag_feedback(coupon_id, legs, f"Leg #{leg_idx + 1} przegrany", verbose=verbose)
+                    stats["settled"] += 1
+                except Exception as e:
+                    log.error("Błąd rozliczania kuponu ID=%s: %s", coupon_id, e)
+                    stats["errors"] += 1
+            else:
+                stats["settled"] += 1
+            continue
+
         if None in leg_results:
             stats["partial"] += 1
             if verbose:
@@ -211,7 +246,7 @@ def settle_active_coupons(
             continue
 
         all_correct = all(r == 1 for r in leg_results)
-        new_status = STATUS_WON if all_correct else STATUS_LOSE
+        new_status = "WIN" if all_correct else "LOSE"
         payout = round(stake * total_odds, 2) if all_correct else 0.0
         roi = round((payout - stake) / stake * 100, 1) if stake else 0.0
 
@@ -270,22 +305,34 @@ def settle_active_coupons(
     return stats
 
 
-def _send_to_rag_feedback(coupon_id: int, legs: list, results: str | None, verbose: bool = True):
+def _send_to_rag_feedback(coupon_id: int, legs: list, reason: str, verbose: bool = True):
     """
-    Wysyła info o LOSE kuponie do post_match_analyzer (RAG feedback).
+    Wysyła info o LOSE kuponie do ai_feedback (RAG learning).
+
+    Args:
+        coupon_id: ID kuponu (użyty jako match_id dla feedback)
+        legs: Lista leg'ów kuponu
+        reason: Powód porażki (np. "Leg #1 przegrany")
+        verbose: Drukuj log
     """
     try:
-        from footstats.ai.post_match_analyzer import uczy_sie_z_porażek
+        from footstats.ai.post_match_analyzer import _zapisz_feedback
 
-        lesson = _generate_lesson(legs, results)
-        uczy_sie_z_porażek(
-            coupon_id=coupon_id,
-            lesson_text=lesson,
-            ai_model="manual_settlement",
+        # Stwórz prediction_details z informacją o tipach w kuponie
+        prediction_details = {
+            "coupon_id": coupon_id,
+            "legs_count": len(legs),
+            "tips": [leg.get("tip", "?") for leg in legs],
+        }
+
+        _zapisz_feedback(
+            match_id=coupon_id,
+            prediction_details=prediction_details,
+            reason=reason,
         )
 
         if verbose:
-            log.info("Wysłano feedback do RAG dla kuponu #%s", coupon_id)
+            log.info("Wysłano feedback do RAG dla kuponu #%s: %s", coupon_id, reason)
     except Exception as e:
         log.warning("Błąd wysyłania feedback do RAG: %s", e)
 
