@@ -128,7 +128,7 @@ def _fetch_fixtures(api_key: str, league_id: int, date_str: str) -> list[dict]:
         r = requests.get(
             f"{API_BASE}/fixtures",
             headers={"x-apisports-key": api_key},
-            params={"league": league_id, "date": date_str, "season": datetime.now().year},
+            params={"league": league_id, "date": date_str},
             timeout=15,
         )
         r.raise_for_status()
@@ -334,9 +334,33 @@ def update_active_coupons(
     if verbose:
         print(f"[CouponUpdater] Aktywnych kuponów do sprawdzenia: {len(rows)}")
 
-    fixtures_cache: dict[tuple, list] = {}
+    # Jeden request na datę (bez filtra ligi — free plan API-Football tego wymaga)
+    date_cache: dict[str, list] = {}
     req_count = 0
     stats = {"closed": 0, "partial": 0, "errors": 0}
+
+    def _get_fixtures_for_date(date_str: str) -> list[dict]:
+        nonlocal req_count
+        if date_str in date_cache:
+            return date_cache[date_str]
+        if req_count >= 80:
+            date_cache[date_str] = []
+            return []
+        try:
+            r = requests.get(
+                f"{API_BASE}/fixtures",
+                headers={"x-apisports-key": api_key},
+                params={"date": date_str},
+                timeout=15,
+            )
+            r.raise_for_status()
+            date_cache[date_str] = r.json().get("response", [])
+        except Exception as e:
+            log.warning("API-Football date-fetch error (date=%s): %s", date_str, e)
+            date_cache[date_str] = []
+        req_count += 1
+        time.sleep(0.3)
+        return date_cache[date_str]
 
     for row in rows:
         coupon_id = row["id"]
@@ -361,24 +385,10 @@ def update_active_coupons(
             home = leg.get("home", leg.get("mecz", "").split(" vs ")[0])
             away = leg.get("away", leg.get("mecz", "").split(" vs ")[-1])
             tip = leg.get("tip", "")
-            league = leg.get("league", "")
 
-            league_ids = _liga_ids_dla_nazwy(league)
-            wynik = None
-
-            for lid in league_ids:
-                cache_key = (match_date[:10], lid)
-                if cache_key not in fixtures_cache:
-                    if req_count >= 80:
-                        break
-                    fixtures_cache[cache_key] = _fetch_fixtures(api_key, lid, match_date[:10])
-                    req_count += 1
-                    time.sleep(0.5)
-
-                pending_mock = {"team_home": home, "team_away": away}
-                wynik = _znajdz_wynik(pending_mock, fixtures_cache[cache_key])
-                if wynik:
-                    break
+            fixtures = _get_fixtures_for_date(match_date[:10])
+            pending_mock = {"team_home": home, "team_away": away}
+            wynik = _znajdz_wynik(pending_mock, fixtures)
 
             if wynik:
                 correct = _oblicz_tip_correct(tip, wynik)
