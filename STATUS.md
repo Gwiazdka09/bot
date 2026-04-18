@@ -82,14 +82,19 @@ _(brak aktywnych blokerów)_
 ### Priorytet ŚREDNI
 - [ ] **BetBuilder Superbet** — Playwright login, scraper SuperSocial, `scrapers/superbet.py`
 - [ ] **Test integracji Telegram** — `tests/test_telegram.py` wysyła testową wiadomość (weryfikacja tokenu i uprawnień bota)
-- [x] ~~**Weryfikacja harmonogramu**~~ — **GOTOWE** (`docs/scheduler_setup.md` + `scripts/` z `silent_run.vbs`)
-- [x] ~~**Instalacja Streamlit**~~ — **GOTOWE** (`src/footstats/dashboard.py`, uruchom: `python -m streamlit run src/footstats/dashboard.py`)
 
 ### Priorytet NISKI
 - [ ] **Etap 5 (JSON export)** ← przeniesiony z ŚREDNIEGO (nie blokuje nic)
 - [ ] Audyt i usunięcie `legacy/`
 - [ ] Langfuse LLM Observability (śledzenie tokenów Groq)
 - [x] ~~**Etap 7 (RAG)**~~ — **GOTOWE** (`ai_feedback` → wstrzykiwane w prompt Groq)
+
+## DONE — ukończone
+
+### Veryfikacja i integracja (v3.1-3.2)
+- ✅ **Weryfikacja harmonogramu** — `docs/scheduler_setup.md` + `scripts/` z `silent_run.vbs` (commit 566c822)
+- ✅ **Instalacja Streamlit** — `src/footstats/dashboard.py` aktywna, uruchom: `python -m streamlit run src/footstats/dashboard.py` (commit 57a24ca)
+- ✅ **Czyszczenie powiadomień UI** — usunięte `alert()` dialogi, wyłączone `setInterval()` polling, dodane inline error messages w HTML (v3.2)
 
 ---
 

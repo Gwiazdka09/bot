@@ -871,10 +871,11 @@
       // Animuj pasek postępu
       const bar = document.getElementById('wiz-progress-bar');
       let pct = 0;
-      const ticker = setInterval(() => {
-        pct = Math.min(pct + (pct < 70 ? 8 : 2), 90);
-        bar.style.width = pct + '%';
-      }, 200);
+      // DISABLED: Polling notifications removed for discrete operation (v3.2)
+      // const ticker = setInterval(() => {
+      //   pct = Math.min(pct + (pct < 70 ? 8 : 2), 90);
+      //   bar.style.width = pct + '%';
+      // }, 200); // DISABLED: polling removed (v3.2)
 
       try {
         const res  = await fetch('/api/matches/analyze', {
@@ -884,15 +885,24 @@
         });
         wiz.analysis = await res.json();
         wiz.selections = [];
-        clearInterval(ticker);
+        // clearInterval(ticker); // DISABLED: polling removed (v3.2)
         bar.style.width = '100%';
         await new Promise(r => setTimeout(r, 400));
         _renderAnalysis();
         wizStep(3);
       } catch(e) {
-        clearInterval(ticker);
+        // clearInterval(ticker); // DISABLED: polling removed (v3.2)
         wizStep(1);
-        alert('Błąd analizy: ' + e.message);
+        console.error('Błąd analizy:', e.message);
+        // Display error in UI instead of alert
+        const errDiv = document.getElementById('analysis-error') || (() => {
+          const d = document.createElement('div');
+          d.id = 'analysis-error';
+          d.style.cssText = 'color: #e74c3c; font-size: 12px; margin-top: 8px;';
+          document.querySelector('form').appendChild(d);
+          return d;
+        })();
+        errDiv.textContent = '❌ Błąd analizy: ' + e.message;
       }
     }
 
@@ -970,7 +980,15 @@
 
     async function wizKelly() {
       if (wiz.selections.length === 0) {
-        alert('Wybierz co najmniej jeden typ przed obliczeniem Kelly!');
+        console.warn('Wybierz co najmniej jeden typ przed obliczeniem Kelly!');
+        const warnDiv = document.getElementById('kelly-warning') || (() => {
+          const d = document.createElement('div');
+          d.id = 'kelly-warning';
+          d.style.cssText = 'color: #f39c12; font-size: 12px; margin-top: 8px;';
+          document.querySelector('form').appendChild(d);
+          return d;
+        })();
+        warnDiv.textContent = '⚠️ Wybierz co najmniej jeden typ przed obliczeniem Kelly!';
         return;
       }
       wizStep(4);
@@ -983,7 +1001,15 @@
         wiz.kelly = await res.json();
         _renderKelly();
       } catch(e) {
-        alert('Błąd Kelly: ' + e.message);
+        console.error('Błąd Kelly:', e.message);
+        const kellyErrDiv = document.getElementById('kelly-error') || (() => {
+          const d = document.createElement('div');
+          d.id = 'kelly-error';
+          d.style.cssText = 'color: #e74c3c; font-size: 12px; margin-top: 8px;';
+          document.querySelector('form').appendChild(d);
+          return d;
+        })();
+        kellyErrDiv.textContent = '❌ Błąd Kelly: ' + e.message;
         wizStep(3);
       }
     }
