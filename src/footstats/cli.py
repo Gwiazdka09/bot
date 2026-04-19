@@ -140,7 +140,7 @@ def _ai_blok_pewniaczki(wyniki_p: list):
         return
 
     if not Confirm.ask(
-        "[bold yellow]🤖 Analiza AI + propozycja kuponów (Groq llama-3.3-70b)?[/bold yellow]",
+        "[bold yellow]🤖 Analiza AI + propozycja kuponów (Groq llama-3.1-8b)?[/bold yellow]",
         default=True,
     ):
         return

@@ -10,13 +10,16 @@ from footstats.utils.console import console
 
 load_dotenv()
 
-GROQ_MODEL   = "llama-3.3-70b-versatile"
+GROQ_MODEL   = "llama-3.1-8b-instant"
 OLLAMA_MODEL = "gemma2:2b"
 OLLAMA_URL   = "http://localhost:11434/api/generate"
 
 
 def _groq(prompt: str, max_tokens: int = 600) -> str | None:
-    """Odpytuje Groq API. Zwraca tekst lub None jeśli błąd."""
+    """
+    Odpytuje Groq API. Zwraca tekst lub None jeśli błąd.
+    Obsługuje RateLimitError gracefully — loguje warning zamiast error.
+    """
     klucz = os.getenv("GROQ_API_KEY", "").strip()
     if not klucz:
         return None
@@ -41,7 +44,12 @@ def _groq(prompt: str, max_tokens: int = 600) -> str | None:
         )
         return resp.choices[0].message.content
     except Exception as e:
-        print(f"[AI] Groq błąd: {e}")
+        err_str = str(e).lower()
+        # RateLimitError (429) — graceful handling, nie wywalaj
+        if "429" in err_str or "rate_limit" in err_str or "too many requests" in err_str:
+            print(f"[AI] ⚠️  Groq RateLimitError (429) — zwracam None, backtest czeka i retry")
+        else:
+            print(f"[AI] Groq błąd: {e}")
         return None
 
 

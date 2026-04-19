@@ -122,7 +122,7 @@ def ask_groq_trainer(report_text: str, n_matches: int) -> dict | None:
         client = _GroqSDK(api_key=klucz)
         try:
             resp = client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant",
                 messages=[
                     {"role": "system", "content": SYSTEM_TRAINER},
                     {"role": "user",   "content": prompt},
@@ -153,7 +153,7 @@ def ask_groq_trainer(report_text: str, n_matches: int) -> dict | None:
             "https://api.groq.com/openai/v1/chat/completions",
             headers={"Authorization": f"Bearer {klucz}", "Content-Type": "application/json"},
             json={
-                "model": "llama-3.3-70b-versatile",
+                "model": "llama-3.1-8b-instant",
                 "messages": [
                     {"role": "system", "content": SYSTEM_TRAINER},
                     {"role": "user",   "content": prompt},

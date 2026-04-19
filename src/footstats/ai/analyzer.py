@@ -200,7 +200,7 @@ def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
         import groq as groq_lib
         client = groq_lib.Groq(api_key=klucz)
         resp = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[
                 {"role": "system", "content": system},
                 {"role": "user",   "content": prompt},

@@ -179,6 +179,8 @@ def _run_ai_analysis(wyniki_batch: list[dict], stawka: float = 5.0) -> dict | No
     Wywołuje ai_analiza_pewniaczki() na batchu meczów.
     Dodaje flagę [BACKTEST] do kontekstu RAG.
     Zwraca dict z top3, kupon_a, kupon_b lub None.
+
+    Error handling: obsługuje 429 (Rate Limit) gracefully — czeka i loguje do Langfuse zamiast wywalać.
     """
     if not wyniki_batch:
         return None
@@ -192,8 +194,23 @@ def _run_ai_analysis(wyniki_batch: list[dict], stawka: float = 5.0) -> dict | No
         )
         return result
     except Exception as e:
-        logger.error(f"Błąd ai_analiza_pewniaczki: {e}")
-        return None
+        err_str = str(e).lower()
+        # 429 / Rate Limit — czekaj i loguj, nie wywalaj
+        if "429" in err_str or "rate" in err_str or "too many requests" in err_str:
+            logger.warning(f"[429] Groq rate limit — czekamy 30s i pomijamy batch: {e}")
+            lf = _init_langfuse()
+            if lf and lf is not False:
+                try:
+                    lf.trace(name="backtest_rate_limit",
+                             metadata={"batch_size": len(wyniki_batch), "error": str(e)}).event(
+                        name="groq_429_hit")
+                except Exception:
+                    pass
+            time.sleep(30)  # Czekaj przed następnym batchemm
+            return None
+        else:
+            logger.error(f"Błąd ai_analiza_pewniaczki (nie-rate-limit): {e}")
+            return None
 
 
 def _extract_tips_from_analysis(analysis: dict) -> list[dict]:
@@ -456,7 +473,7 @@ def backtest_period(
 
                 # Throttle — Groq rate limit
                 if batch_start > 0:
-                    time.sleep(4)
+                    time.sleep(5)
 
                 trace.event("ai_analysis_start", batch_size=len(batch))
                 analysis = _run_ai_analysis(batch, stawka=stawka)
