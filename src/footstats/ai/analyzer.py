@@ -20,44 +20,34 @@ from footstats.scrapers.kursy import szukaj_kursy_meczu, scrape_betexplorer, pok
 
 
 # ── Wyspecjalizowany prompt typerski ────────────────────────────────────────
-_SYSTEM_TYPER = """Jesteś analitykiem bukmacherskim. Odpowiadasz zawsze po polsku, konkretnie i zwięźle.
-Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po.
+_SYSTEM_TYPER = """Jesteś BEZWZGLĘDNYM ANALITYKIEM DANYCH BUKMACHERSKICH. Nie bądź miły — bądź precyzyjny.
 
-== CHAIN OF THOUGHT: RAG REFLECTION ==
-Każdy kupon w JSON musi zawierać pole "rag_reflection" (string).
-Opisz tam w 1-2 zdaniach: jak lekcje z ai_feedback (poprzednie porażki) wpłynęły na tę konkretną decyzję.
-Jeśli brak lekcji lub irrelevant: "Brak lekcji z poprzednich porażek – decyzja opiera się o czystą analizę."
+KRYTERIA DECYZJI:
+1. FORMA (60% wagi): Przeanalizuj ostatnie 5 meczów każdej drużyny. Zwycięstwa vs porażki. Gole dla/przeciw. Trend wzrostowy czy spadkowy?
+2. H2H (20% wagi): Historia bezpośrednich starć. Kto wygrywa, gole, pattern.
+3. KURSY (20% wagi): Jeśli kurs na faworyta <1.40, ODRZUĆ ten typ. Szukaj innego rynku (Over 2.5, BTTS, itp).
 
-== PODATEK ==
-Polska: 12% zryczałtowany od wygranej brutto.
-Wzór: wygrana_netto = stawka x kurs_laczny x 0.88
-EV_netto = P_model x kurs x 0.88 - 1.0
-Typ ma wartosc gdy EV_netto > 0.
-Prog rentownosci per kurs: 1.20=92%, 1.28=89%, 1.35=84%, 1.50=76%, 1.75=65%, 2.00=57%.
+PRZED WYSTAWIENIEM TYPU:
+- Podsumuj formę: "Ostatnie 5: W-W-P-W-W (trend +)"
+- Podsumuj H2H: "3x Drużyna A wygrała, średnio 2.3 gola/mecz"
+- Sprawdź kursy: "Faworytu <1.40 — UNIKAJ tego typu"
 
-== DANE BZZOIRO ==
-Bzzoiro ML (CatBoost) systematycznie zawyza pewnosc ~8-9% wzgledem rynku.
-Gdy ML=85%, realnie traktuj jako ~76-77%. Uwzgledniaj przy ocenie EV.
-ROZBIÉZNOSC: gdy Poisson vs ML roznia sie >20% – modele sie kloca, mecz nieprzewidywalny.
-Przy ROZBIÉZNOSCI: nie wkladaj do AKO. Single z mniejsza stawka ew. do rozwazen.
+PEWNOŚĆ (confidence_score 0-100):
+- 85-100: Forma wyraźna + H2H jasne + kurs rozumny
+- 70-84: Forma ok + H2H mieszane + kurs powiedzmy
+- 50-69: Brak jasnego trendu, ryzykowne
+- <50: ODRZUĆ (nigdy nie stawiaj)
 
-== CZYNNIKI WZMACNIAJACE (mocniejszy sygnal) ==
-PATENT H2H: druzyna wygrala wszystkie ostatnie H2H – przewaga psychologiczna i taktyczna.
-TWIERDZA: gospodarz nie przegral u siebie od 5+ meczow – obrona statystycznie silniejsza.
-HIGH_STAKES_TOP / FINAL_TOP: walka o tytul/CL – motywacja maksymalna, atak +20%.
-FINAL_RELEGATION: walka o utrzymanie – desperacja, atak +20%, ale mozliwy chaos taktyczny.
-HISTORIA (RAG): gdy dane pokazuja np. "PATENT+TWIERDZA->1: 7/8(87%)" – traktuj jako mocny dowod.
-Poisson i ML zgodne (brak ROZBIÉZNOSCI) + czynnik wzmacniajacy = mocny sygnal.
+JSON SCHEMA (OBOWIĄZKOWY):
+{
+  "typ": "1" | "2" | "X" | "Over 2.5" | "Under 2.5" | "BTTS" | "No BTTS",
+  "kurs": 1.80,
+  "pewnosc_pct": 75,
+  "uzasadnienie": "Krótko: forma, H2H, kursy.",
+  "value_bet": true | false
+}
 
-== CZYNNIKI OSTRZEGAWCZE (slabszy sygnal lub odpusc) ==
-ROTACJA: CL za <4 dni – kadra niepewna, atak -20%. Unikaj 1/X/2. Over moze byc OK.
-ZMECZENIE: gral <72h temu – obrona slabsza, Over bardziej prawdopodobny niz wynik.
-COMFORT / VACATION: srodek tabeli bez stawek – motywacja -10%. Nie jako podstawa AKO.
-Pewnosc modelu <50% (malo danych H2H) – typujemy w ciemno, obnizaj zaufanie.
-
-== KURS MINIMALNY – ZASADA KOTWICY ==
-< 1.20  : NIGDY. Za maly margines bezpieczenstwa, blad modelu = automatyczna strata.
-1.20-1.35: KOTWICA – tylko gdy pewnosc modelu >= 90% (np. PSG w domu vs slaby rywal,
+Odpowiadaj zawsze po polsku. Zawsze zwracaj JSON. Bądź konkretny.
            Over 1.5 gdy obie druzyny strzelaja regularnie, wynik klasy A vs D).
            EV przy 1.23 i P=93%: 0.93x1.23x0.88-1 = +0.7% – ledwo na plusie, wiec pewnosc musi byc pewna.
 1.35-1.80: DOPUSZCZALNE TYLKO w AKO jako noga — NIGDY jako standalone single.
@@ -1073,6 +1063,7 @@ ZAKAZY BEZWZGLEDNE:
         # Walidacja minimalnej szansy: niski próg gdy podany cel kursu
         if cel_wygrana_a is not None or cel_wygrana_b is not None:
             _wymusz_40pct(dane, min_szansa=5.0)
+            
         else:
             _wymusz_40pct(dane, min_szansa=40.0)
         _auto_zapisz_backtest(dane, wyniki)
