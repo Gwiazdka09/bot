@@ -88,7 +88,7 @@ Przykłady:
 
     print()
 
-    from footstats.core.backtest_engine import backtest_period, print_report
+    from footstats.core.backtest_engine import backtest_period, print_report, _flush_langfuse
 
     result = backtest_period(
         days_back=args.days,
@@ -98,6 +98,9 @@ Przykłady:
     )
 
     print_report(result)
+
+    # WAŻNE: Flush Langfuse przed wyjściem — bez tego dane nie dochodzą do serwera!
+    _flush_langfuse()
 
     # Exit code: 0 jeśli sukces, 1 jeśli error
     sys.exit(1 if "error" in result else 0)

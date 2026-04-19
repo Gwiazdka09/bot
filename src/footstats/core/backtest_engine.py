@@ -39,12 +39,13 @@ def _init_langfuse():
         sk = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
         if pk and sk:
             from langfuse import Langfuse
+            host = os.getenv("LANGFUSE_BASE_URL") or os.getenv("LANGFUSE_HOST") or "https://cloud.langfuse.com"
             _langfuse = Langfuse(
                 public_key=pk,
                 secret_key=sk,
-                host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com"),
+                host=host,
             )
-            logger.info("Langfuse aktywny — trace'y będą logowane")
+            logger.info(f"Langfuse aktywny ({host}) — trace'y będą logowane")
         else:
             _langfuse = False  # sentinel: brak kluczy
     except Exception as e:
@@ -379,6 +380,21 @@ def _save_rag_feedback(pred_id: int, eval_result: dict, lesson: str):
 
 
 # ---------------------------------------------------------------------------
+#  Flush Langfuse (WAŻNE — bez tego dane nie dochodzą do serwera!)
+# ---------------------------------------------------------------------------
+
+def _flush_langfuse():
+    """Wysyła wszystkie queued trace'y do Langfuse. Musi być na końcu."""
+    lf = _init_langfuse()
+    if lf and lf is not False:
+        try:
+            lf.flush()
+            logger.info("Langfuse flush() — dane wysłane do serwera")
+        except Exception as e:
+            logger.warning(f"Langfuse flush błąd: {e}")
+
+
+# ---------------------------------------------------------------------------
 #  Główna pętla backtestowa
 # ---------------------------------------------------------------------------
 
@@ -529,6 +545,10 @@ def backtest_period(
         stats["accuracy_pct"] = round(stats["wins"] / decided * 100, 1)
 
     stats["theoretical_profit_pln"] = round(stats["theoretical_profit_pln"], 2)
+
+    # WAŻNE: Flush Langfuse aby dane dotarły do serwera zanim proces się zamknie
+    _flush_langfuse()
+
     return stats
 
 
