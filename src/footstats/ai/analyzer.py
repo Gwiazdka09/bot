@@ -251,6 +251,47 @@ def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
         return zapytaj_ai(prompt, max_tokens)
 
 
+def _pobierz_podobne_mecze(home: str, away: str, n: int = 3) -> str:
+    """Fetch N similar historical matches from RAG ai_feedback table.
+
+    Searches for lessons containing either team name, returns formatted string
+    with up to N similar matches for context.
+
+    Args:
+        home: Home team name
+        away: Away team name
+        n: Max number of similar matches to return (default 3)
+
+    Returns:
+        Formatted string with similar matches, empty string if none found or on error
+    """
+    try:
+        from footstats.ai.post_match_analyzer import pobierz_ostatnie_wnioski
+        # Fetch last 5 lessons from RAG database
+        lessons = pobierz_ostatnie_wnioski(5)
+
+        similar = []
+        for lesson in lessons:
+            # Match if either team appears in lesson
+            if home.lower() in lesson.lower() or away.lower() in lesson.lower():
+                similar.append(lesson)
+                if len(similar) >= n:
+                    break
+
+        if not similar:
+            return ""
+
+        # Format for injection into prompt
+        header = f"\nPODOBNE MECZE Z HISTORII (nauka z przeszłości):\n"
+        for i, lesson in enumerate(similar, 1):
+            # Truncate lesson to 100 chars for readability
+            header += f"{i}. {lesson[:100]}…\n"
+        return header
+    except Exception:
+        # Silently fail: RAG is optional, don't break prediction if it fails
+        return ""
+
+
 # ── Pomocnicze ───────────────────────────────────────────────────────
 
 def _kurs_do_prob(kurs: float | None) -> float | None:
@@ -1100,6 +1141,13 @@ ZAKAZY BEZWZGLEDNE:
 - Maks. 2 mecze z tej samej ligi w jednym kuponie.
 - Każda noga musi mieć pewnosc_pct >= 60% — nie dokładaj nóg poniżej tego progu.
 - Wspólne nogi A↔B: dozwolone TYLKO przy pewnosc_pct >= 75%. Poniżej 75% — unikalne dla jednego kuponu."""
+
+    # Inject RAG similar matches for historical context (learning from past)
+    if wyniki:
+        home = wyniki[0].get("gospodarz", "")
+        away = wyniki[0].get("goscie", "")
+        rag_similar = _pobierz_podobne_mecze(home, away, n=3)
+        prompt = f"{prompt}{rag_similar}"
 
     tekst = _zapytaj_typera(prompt, max_tokens=1400)
     dane = _wyciagnij_json(tekst)
