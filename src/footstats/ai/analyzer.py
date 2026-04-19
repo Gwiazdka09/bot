@@ -172,6 +172,54 @@ def _get_liga_statystyki_blok() -> str:
         return ""
 
 
+def _analizuj_forme(mecze: list) -> dict:
+    """Analyze last 5 matches: wins, losses, goals for/against, trend.
+
+    Args:
+        mecze: List of match dicts with keys: result (1/0/X), scored, conceded
+
+    Returns:
+        Dict with: wins, losses, draws, gf_avg, ga_avg, trend
+    """
+    if not mecze:
+        return {
+            "wins": 0, "losses": 0, "draws": 0,
+            "gf_avg": 0.0, "ga_avg": 0.0,
+            "trend": "unknown"
+        }
+
+    wins = sum(1 for m in mecze if m.get("result") == "1")
+    losses = sum(1 for m in mecze if m.get("result") == "0")
+    draws = sum(1 for m in mecze if m.get("result") == "X")
+
+    gf_sum = sum(m.get("scored", 0) for m in mecze)
+    ga_sum = sum(m.get("conceded", 0) for m in mecze)
+    gf_avg = round(gf_sum / len(mecze), 2)
+    ga_avg = round(ga_sum / len(mecze), 2)
+
+    # Trend: compare first 2 matches vs last 2 matches
+    if len(mecze) >= 2:
+        early_wins = sum(1 for m in mecze[:2] if m.get("result") == "1")
+        recent_wins = sum(1 for m in mecze[-2:] if m.get("result") == "1")
+        if recent_wins > early_wins:
+            trend = "strong_up" if recent_wins == 2 else "up"
+        elif recent_wins < early_wins:
+            trend = "strong_down" if recent_wins == 0 else "down"
+        else:
+            trend = "stable"
+    else:
+        trend = "unknown"
+
+    return {
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "gf_avg": gf_avg,
+        "ga_avg": ga_avg,
+        "trend": trend
+    }
+
+
 def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
     """Groq z systemowym promptem wyspecjalizowanego typera + kalibracja + liga statystyki."""
     klucz = os.getenv("GROQ_API_KEY", "").strip()
