@@ -367,21 +367,28 @@ class SettleRequest(BaseModel):
 
 @app.get("/api/matches/today")
 def get_matches_today():
-    """Zwraca mecze na dziś/jutro z predykcjami ML (Bzzoiro lub mock)."""
+    """Zwraca TYLKO mecze w przyszłości (data+godzina > teraz), posortowane po dacie i godzinie."""
     global _MATCHES_CACHE
     preds = _fetch_predictions()
-    today    = datetime.now().strftime("%Y-%m-%d")
-    tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
-    filtered = [m for m in preds if m.get("data", "") in (today, tomorrow)]
-    if not filtered:
-        filtered = preds[:15]
-    # Sortuj: preferuj wyraźnych faworytów (prob daleko od 33%)
-    def _interest(m):
-        ml = m.get("pred_ml") or {}
-        ph = _to_pct(ml.get("prob_home_win"), 33.0)
-        return -abs(ph - 33.0)
-    filtered.sort(key=_interest)
-    _MATCHES_CACHE = filtered[:15]
+    now = datetime.now()
+
+    # Filtruj mecze w przyszłości
+    future_matches = []
+    for m in preds:
+        data_str = m.get("data", "")
+        godzina_str = m.get("godzina", "")
+        try:
+            match_datetime = datetime.strptime(f"{data_str} {godzina_str}", "%Y-%m-%d %H:%M")
+            if match_datetime > now:
+                future_matches.append(m)
+        except (ValueError, TypeError):
+            # Ignoruj mecze z nieprawidłowym formatem daty/godziny
+            continue
+
+    # Sortuj po dacie, potem po godzinie
+    future_matches.sort(key=lambda m: (m.get("data", ""), m.get("godzina", "")))
+
+    _MATCHES_CACHE = future_matches[:15] if future_matches else preds[:15]
     return _MATCHES_CACHE
 
 
