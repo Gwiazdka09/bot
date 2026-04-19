@@ -582,6 +582,7 @@ def print_report(stats: dict):
     print(f"  Meczów z API-Football:    {stats['total_fixtures']}")
     print(f"  Tipów AI wygenerowanych:  {stats['total_tips']}")
     print(f"  Niedopasowanych:          {stats['unknown']}")
+    print(f"  Pominięte (confidence<75%): {stats.get('skipped_low_confidence', 0)}")
     print("-" * 60)
     print(f"  ✅ Trafione (WIN):        {stats['wins']}")
     print(f"  ❌ Pudła (LOSE):          {stats['losses']}")
