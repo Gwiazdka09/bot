@@ -263,15 +263,21 @@ def _evaluate_tip(tip: dict, fixture: dict) -> dict:
     """
     Porównuje tip AI z wynikiem meczu.
     Zwraca dict z wynikiem ewaluacji.
+
+    CONFIDENCE FILTER: Tipy z pewnosci < 75 będą oznaczone do pominięcia.
     """
     from footstats.core.backtest import _oblicz_tip_correct
 
     score_str = fixture["score_str"]
     ai_tip = tip["typ"]
     kurs = tip.get("kurs") or 1.0
+    pewnosc = tip.get("pewnosc", 65)
 
     tip_correct = _oblicz_tip_correct(ai_tip, score_str)
     is_win = tip_correct == 1
+
+    # CONFIDENCE FILTER: Mark tips below 75% for skipping
+    skip_low_confidence = pewnosc < 75
 
     return {
         "fixture_id": fixture["fixture_id"],
@@ -282,10 +288,11 @@ def _evaluate_tip(tip: dict, fixture: dict) -> dict:
         "score": score_str,
         "ai_tip": ai_tip,
         "kurs": kurs,
-        "pewnosc": tip.get("pewnosc", 65),
+        "pewnosc": pewnosc,
         "tip_correct": tip_correct,
         "is_win": is_win,
         "source": tip.get("source", ""),
+        "skip_low_confidence": skip_low_confidence,
     }
 
 
@@ -439,6 +446,7 @@ def backtest_period(
         "wins": 0,
         "losses": 0,
         "unknown": 0,
+        "skipped_low_confidence": 0,
         "accuracy_pct": 0.0,
         "theoretical_profit_pln": 0.0,
         "new_rag_lessons": 0,
@@ -514,6 +522,11 @@ def backtest_period(
 
                     if eval_result["tip_correct"] is None:
                         stats["unknown"] += 1
+                        continue
+
+                    # CONFIDENCE FILTER: Skip predictions with confidence < 75%
+                    if eval_result["skip_low_confidence"]:
+                        stats["skipped_low_confidence"] += 1
                         continue
 
                     # 4. Zapisz predykcję + wynik
