@@ -262,49 +262,19 @@ def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
         # Langfuse span for Groq API call
         trace_input = {"prompt": prompt[:200], "max_tokens": max_tokens}
 
-        if langfuse:
-            with langfuse.span(
-                name="groq_api_call",
-                input=trace_input,
-                metadata={"model": "llama-3.1-8b-instant", "temperature": 0.25}
-            ):
-                resp = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
-                    messages=[
-                        {"role": "system", "content": system},
-                        {"role": "user",   "content": prompt},
-                    ],
-                    max_tokens=max_tokens,
-                    temperature=0.25,
-                )
-        else:
-            resp = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
-                messages=[
-                    {"role": "system", "content": system},
-                    {"role": "user",   "content": prompt},
-                ],
-                max_tokens=max_tokens,
-                temperature=0.25,
-            )
+        resp = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user",   "content": prompt},
+            ],
+            max_tokens=max_tokens,
+            temperature=0.25,
+        )
 
         result = resp.choices[0].message.content
-
-        # Log successful response
-        if langfuse:
-            langfuse.event(
-                name="groq_response",
-                output={"response_length": len(result), "stop_reason": resp.choices[0].finish_reason}
-            )
-
         return result
     except Exception as e:
-        if langfuse:
-            langfuse.event(
-                name="groq_error",
-                level="error",
-                output={"error": str(e)}
-            )
         return zapytaj_ai(prompt, max_tokens)
 
 
@@ -1206,51 +1176,25 @@ ZAKAZY BEZWZGLEDNE:
         rag_similar = _pobierz_podobne_mecze(home, away, n=3)
         prompt = f"{prompt}{rag_similar}"
 
-    # Langfuse trace for main analysis
+    # Langfuse observability (optional, no-op if missing credentials)
     langfuse = _get_langfuse()
-    if langfuse:
-        trace = langfuse.trace(
-            name="ai_analiza_pewniaczki",
-            input={
-                "matches_count": len(wyniki),
-                "pobierz_forme": pobierz_forme,
-                "has_goals_target": cel_wygrana_a is not None or cel_wygrana_b is not None,
-            }
-        )
-        trace.__enter__()
+
+    tekst = _zapytaj_typera(prompt, max_tokens=1400)
+    dane = _wyciagnij_json(tekst)
+    if "top3" not in dane:
+        dane["_raw"] = tekst
     else:
-        trace = None
+        # Deduplikacja: usuń z kuponu B nogi wspólne z A o niskiej pewności
+        _deduplikuj_kupony(dane, min_wspolna_pewnosc=75)
+        # Walidacja minimalnej szansy: niski próg gdy podany cel kursu
+        if cel_wygrana_a is not None or cel_wygrana_b is not None:
+            _wymusz_40pct(dane, min_szansa=5.0)
 
-    try:
-        tekst = _zapytaj_typera(prompt, max_tokens=1400)
-        dane = _wyciagnij_json(tekst)
-        if "top3" not in dane:
-            dane["_raw"] = tekst
         else:
-            # Deduplikacja: usuń z kuponu B nogi wspólne z A o niskiej pewności
-            _deduplikuj_kupony(dane, min_wspolna_pewnosc=75)
-            # Walidacja minimalnej szansy: niski próg gdy podany cel kursu
-            if cel_wygrana_a is not None or cel_wygrana_b is not None:
-                _wymusz_40pct(dane, min_szansa=5.0)
+            _wymusz_40pct(dane, min_szansa=40.0)
+        _auto_zapisz_backtest(dane, wyniki)
 
-            else:
-                _wymusz_40pct(dane, min_szansa=40.0)
-            _auto_zapisz_backtest(dane, wyniki)
-
-        # Log successful analysis
-        if langfuse:
-            langfuse.event(
-                name="analysis_complete",
-                output={
-                    "has_top3": "top3" in dane,
-                    "has_kupon_a": "kupon_a" in dane,
-                    "has_kupon_b": "kupon_b" in dane,
-                }
-            )
-        return dane
-    finally:
-        if trace:
-            trace.__exit__(None, None, None)
+    return dane
 
 
 def _deduplikuj_kupony(dane: dict, min_wspolna_pewnosc: int = 75) -> None:
