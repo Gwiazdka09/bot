@@ -368,7 +368,7 @@ def _save_rag_feedback(pred_id: int, eval_result: dict, lesson: str):
 def backtest_period(
     days_back: int = 7,
     stawka: float = 5.0,
-    batch_size: int = 10,
+    batch_size: int = 5,
     dry_run: bool = False,
 ) -> dict:
     """
@@ -418,18 +418,32 @@ def backtest_period(
 
         with _LangfuseTrace("backtest_day", {"date": date_str, "stawka": stawka}) as trace:
 
+            # Zlicz dzień na START (niezależnie od liczby meczów)
+            stats["days_analyzed"] += 1
+
             # 1. Pobierz zakończone mecze
             fixtures = _fetch_fixtures_for_date(client, date_str)
             if not fixtures:
                 logger.info(f"[{date_str}] Brak meczów — pomijam")
                 continue
-
-            stats["days_analyzed"] += 1
             stats["total_fixtures"] += len(fixtures)
             trace.event("fixtures_fetched", count=len(fixtures))
 
-            # 2. Konwertuj do formatu Bzzoiro i wyślij do AI w batchach
-            wyniki_all = [_fixture_to_wynik(f) for f in fixtures]
+            # 2. Deduplikuj mecze na podstawie fixture_id (usuwamy duplikaty z API)
+            seen_fixture_ids = set()
+            unique_fixtures = []
+            for f in fixtures:
+                fid = f.get("fixture_id")
+                if fid not in seen_fixture_ids:
+                    seen_fixture_ids.add(fid)
+                    unique_fixtures.append(f)
+
+            if len(unique_fixtures) < len(fixtures):
+                logger.info(f"[{date_str}] Usunięto {len(fixtures) - len(unique_fixtures)} duplikatów. "
+                           f"Zostały {len(unique_fixtures)} unikalnych meczów.")
+
+            # Konwertuj do formatu Bzzoiro i wyślij do AI w batchach
+            wyniki_all = [_fixture_to_wynik(f) for f in unique_fixtures]
 
             for batch_start in range(0, len(wyniki_all), batch_size):
                 batch = wyniki_all[batch_start:batch_start + batch_size]
@@ -442,7 +456,7 @@ def backtest_period(
 
                 # Throttle — Groq rate limit
                 if batch_start > 0:
-                    time.sleep(2)
+                    time.sleep(4)
 
                 trace.event("ai_analysis_start", batch_size=len(batch))
                 analysis = _run_ai_analysis(batch, stawka=stawka)
@@ -550,7 +564,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FootStats Backtest Engine")
     parser.add_argument("--days", type=int, default=7, help="Ile dni wstecz (domyślnie 7)")
     parser.add_argument("--stawka", type=float, default=5.0, help="Stawka PLN (domyślnie 5)")
-    parser.add_argument("--batch", type=int, default=10, help="Batch size dla Groq (domyślnie 10)")
+    parser.add_argument("--batch", type=int, default=5, help="Batch size dla Groq (domyślnie 5)")
     parser.add_argument("--dry-run", action="store_true", help="Bez zapisu do DB")
     args = parser.parse_args()
 

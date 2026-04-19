@@ -44,8 +44,8 @@ Przykłady:
         help="Stawka PLN na zakład (domyślnie 5.0)",
     )
     parser.add_argument(
-        "--batch", type=int, default=10,
-        help="Ile meczów w jednym batchu do Groq (domyślnie 10)",
+        "--batch", type=int, default=5,
+        help="Ile meczów w jednym batchu do Groq (domyślnie 5)",
     )
     parser.add_argument(
         "--dry-run", action="store_true",
