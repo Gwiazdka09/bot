@@ -1,6 +1,6 @@
 # FootStats v3.1 — Interaktywny Kreator
 
-Narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), 3 źródła danych API oraz AI (Groq llama-3.3-70b) w jedno CLI z live dashboardem i interaktywnym kreatorem kuponów.
+Narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), 3 źródła danych API oraz AI (Groq llama-3.1-8b-instant) w jedno CLI z live dashboardem i interaktywnym kreatorem kuponów.
 
 ## Funkcje
 
@@ -67,17 +67,22 @@ Otwórz: `http://localhost:8000` → przekieruje do `/preview`
 
 Zakładki: **Dashboard** (bankroll + ROI) | **Historia** | **Ustawienia** | **Stwórz Kupon**
 
-## Automatyczne uruchamianie (Windows Task Scheduler)
+## Automatyzacja i Tryb "Cichy" (Windows Task Scheduler)
 
-Instrukcja w `docs/scheduler_setup.md`. Skrypty w `scripts/`:
+System posiada dedykowany tryb pracy w tle, który nie przeszkadza w pracy na komputerze (brak wyskakujących okien konsoli).
 
-| Plik | Czas | Opis |
+| Plik | Częstotliwość | Opis |
 |------|------|------|
-| `scripts/run_dashboard.bat` | Przy starcie systemu | Serwer API na porcie 8000 |
-| `scripts/run_agent.bat` | 08:00 + 16:00 | Codzienna analiza + kupon |
-| `scripts/run_results.bat` | 23:30 | Aktualizacja wyników i zamknięcie kuponów |
+| `cichy_bot.bat` | Co 2 godziny | Automatyczna aktualizacja wyników, rozliczanie kuponów i bankrolla (używa `pythonw.exe`) |
+| `scripts/run_dashboard.bat` | Przy starcie | Serwer API na porcie 8000 |
+| `scripts/run_agent.bat` | 08:00 + 16:00 | Główny Daily Agent (analiza + kupon) |
 
-Uruchamiane przez `scripts/silent_run.vbs` — bez okna konsoli (`wscript.exe`).
+Konfiguracja automatyzacji odbywa się poprzez PowerShell:
+```powershell
+# Rejestracja zadania co 2h w trybie ukrytym
+Register-ScheduledTask -TaskName 'FootStats_Silent_Update' ...
+```
+Szczegóły w `docs/scheduler_setup.md`.
 
 ## Uruchomienie
 

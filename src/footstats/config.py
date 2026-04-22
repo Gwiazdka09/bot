@@ -52,6 +52,10 @@ AGENT_KANDYDAT_PROG = 0.55 # prog pewnosci dla daily_agent (nizszy niz PEWNIACZE
 AGENT_BANKROLL      = 100.0 # bankroll do Kelly Criterion (PLN)
 AGENT_KELLY_FRACTION = 4    # bezpieczny fractional Kelly: f*/4 (bardziej konserwatywny dla 100 PLN)
 
+# Ligi do śledzenia (API-Football IDs):
+# 140: La Liga, 61: Ligue 1, 106: Ekstraklasa, 88: Eredivisie, 144: Pro League, 113: Allsvenskan, 39: Premier League, 2: Champions League
+TRACKED_LEAGUES = [140, 61, 106, 88, 144, 113, 39, 2]
+
 # Klucze .env – nazwy zmiennych srodowiskowych
 ENV_FOOTBALL   = "FOOTBALL_API_KEY"   # football-data.org
 ENV_APISPORTS  = "APISPORTS_KEY"      # api-sports.io (API-Football)

@@ -51,6 +51,7 @@ F:\bot\
 | Kreator Kuponu | 5-krokowy wizard interaktywny — mecze Bzzoiro → Kelly → zapis do DB | `8e40571` |
 | Harmonogram | `docs/scheduler_setup.md` + `scripts/` — Windows Task Scheduler bez okna konsoli | `566c822` |
 | Zamykanie kuponów | `update_active_coupons()` w `results_updater.py` — ACTIVE→WIN/LOSE po meczach | `(bieżący)` |
+| Automatyzacja | Pełny "Cichy Bot" (`cichy_bot.bat`) + `TRACKED_LEAGUES` w `config.py` | `(bieżący)` |
 
 ---
 
@@ -105,7 +106,7 @@ _(brak aktywnych blokerów)_
 
 | Warstwa | Narzędzie | Uwagi |
 |---------|-----------|-------|
-| LLM | Groq (llama-3.3-70b) | główny model analizy |
+| LLM | Groq (llama-3.1-8b-instant) | główny model analizy |
 | Scraper | Playwright | login Bzzoiro, BetBuilder |
 | PDF | ReportLab + DejaVuSans | eksport kuponów |
 | DB | SQLite WAL | `data/footstats_backtrack.db` |
