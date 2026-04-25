@@ -1143,7 +1143,9 @@ def ai_analiza_pewniaczki(
 
     mecze_opisy = [_buduj_opis_meczu(w) for w in wyniki[:20]]
 
-    prompt = f"""Masz do dyspozycji {len(wyniki)} meczów piłkarskich z predykcjami na najbliższe 72h.
+    prompt = f"""ROLA: Jesteś zawodowym, ultra-sceptycznym analitykiem bukmacherskim. Twój cel NIE jest znaleźć zwycięzcę — jest znaleźć powody, dla których typ PRZEGRA.
+
+MASZ DO DYSPOZYCJI: {len(wyniki)} meczów piłkarskich z predykcjami na najbliższe 72h.
 Mecze [metoda:POISSON] mają pełną analizę czynnikową. Mecze [metoda:ML] to samo Bzzoiro bez historii.
 
 KONTEKST ZBIORU:
@@ -1151,6 +1153,16 @@ KONTEKST ZBIORU:
 {kalibracja_str}{feedback_str}
 PODATEK: 12% zryczałtowany. Wzór netto: stawka × kurs_łączny × 0.88
 EV(brutto) w danych jest PRZED podatkiem — po podatku realny zysk jest o ~12% niższy.
+
+== SKALOWANIE PEWNOŚCI (CHŁODNA KALKULACJA, NIE OPTYMIZM) ==
+75-100%: TYLKO dla absolutnych "pewniaków" — seria zwycięstw, brak kontuzji, historyczna dominacja. MUSI być miażdżący dowód.
+50-74%: Mecz o wyrównanych szansach, normalny zakład.
+<50%: Wysokie ryzyko, brak stabilności — UNIKAJ.
+
+REGUŁA KURSU: Jeśli sugerowana pewność jest wysoka (>=75%) A kurs >2.00, SUROWO obniż ocenę — chyba że masz miażdżące dowody statystyczne.
+
+== OBOWIĄZKOWA SEKCJA RYZYKA ==
+Każda analiza MUSI zawierać pole "ryzyko" z 3 najsilniejszymi argumentami PRZECIWKO danemu typowi.
 
 == FILOZOFIA KUPONÓW ==
 {_buduj_cel_kuponow(cel_wygrana_a, cel_wygrana_b, stawka)}
@@ -1167,31 +1179,38 @@ ZADANIE: Odpowiedz TYLKO w JSON (bez tekstu przed/po):
       "kurs": 1.48,
       "pewnosc_pct": 72,
       "ev_netto": 6.8,
-      "uzasadnienie": "1 zdanie po polsku"
+      "uzasadnienie": "1 zdanie po polsku",
+      "ryzyko": [
+        "Argument 1 PRZECIWKO typowi",
+        "Argument 2 PRZECIWKO typowi",
+        "Argument 3 PRZECIWKO typowi"
+      ]
     }}
   ],
   "kupon_a": {{
     "zdarzenia": [
-      {{"nr": 1, "mecz": "Druzyna1 vs Druzyna2", "typ": "1", "kurs": 1.55, "pewnosc_pct": 70}},
-      {{"nr": 2, "mecz": "Druzyna3 vs Druzyna4", "typ": "Over", "kurs": 1.80, "pewnosc_pct": 65}},
-      {{"nr": 3, "mecz": "Druzyna5 vs Druzyna6", "typ": "1", "kurs": 1.65, "pewnosc_pct": 68}},
-      {{"nr": 4, "mecz": "Druzyna7 vs Druzyna8", "typ": "BTTS", "kurs": 1.90, "pewnosc_pct": 62}}
+      {{"nr": 1, "mecz": "Druzyna1 vs Druzyna2", "typ": "1", "kurs": 1.55, "pewnosc_pct": 70, "ryzyko": ["Kontuzja kluczowego gracza", "Forma spadkowa ostatnie 3 mecze", "Dominacja przeciwnika w meczach bezpośrednich"]}},
+      {{"nr": 2, "mecz": "Druzyna3 vs Druzyna4", "typ": "Over", "kurs": 1.80, "pewnosc_pct": 65, "ryzyko": ["Obrona mocna ostatnio", "Zagęszczenie kalendarza", "Historia niskich wyników"]}},
+      {{"nr": 3, "mecz": "Druzyna5 vs Druzyna6", "typ": "1", "kurs": 1.65, "pewnosc_pct": 68, "ryzyko": ["Zmiana trenera niedawno", "Brak formy u napastnika", "Granie na wyjeździe"]}},
+      {{"nr": 4, "mecz": "Druzyna7 vs Druzyna8", "typ": "BTTS", "kurs": 1.90, "pewnosc_pct": 62, "ryzyko": ["Drużyna gośćmi zaciśnięta obrona", "Nieobecność napastnika", "Taktyka defensywna"]}}
     ],
     "kurs_laczny": 8.7,
     "szansa_wygranej_pct": 19.4,
-    "wygrana_netto": 38.3
+    "wygrana_netto": 38.3,
+    "ryzyko_ogolne": "Kurs bardzo wysoki — spora szansa na przegrana"
   }},
   "kupon_b": {{
     "zdarzenia": [
-      {{"nr": 1, "mecz": "Druzyna1 vs Druzyna2", "typ": "1", "kurs": 1.75, "pewnosc_pct": 64}},
-      {{"nr": 2, "mecz": "Druzyna3 vs Druzyna4", "typ": "2", "kurs": 2.10, "pewnosc_pct": 60}},
-      {{"nr": 3, "mecz": "Druzyna5 vs Druzyna6", "typ": "Over", "kurs": 1.85, "pewnosc_pct": 62}},
-      {{"nr": 4, "mecz": "Druzyna7 vs Druzyna8", "typ": "1", "kurs": 1.60, "pewnosc_pct": 66}},
-      {{"nr": 5, "mecz": "Druzyna9 vs Druzyna10", "typ": "BTTS", "kurs": 1.75, "pewnosc_pct": 63}}
+      {{"nr": 1, "mecz": "Druzyna1 vs Druzyna2", "typ": "1", "kurs": 1.75, "pewnosc_pct": 64, "ryzyko": ["Slaba obrona na wyjeździe", "Forma oscylacyjna", "Brak bezpośrednich wygran"]}},
+      {{"nr": 2, "mecz": "Druzyna3 vs Druzyna4", "typ": "2", "kurs": 2.10, "pewnosc_pct": 60, "ryzyko": ["Kurs wysoki — mało pewna prognoza", "Drużyna 1 może się zmobilizować", "Atmosfera dla gospodarza"]}},
+      {{"nr": 3, "mecz": "Druzyna5 vs Druzyna6", "typ": "Over", "kurs": 1.85, "pewnosc_pct": 62, "ryzyko": ["Obrona mocna zmiana taktyki", "Kontuzje napastników", "Wynik 0-0 w ostatnich spotkaniach"]}},
+      {{"nr": 4, "mecz": "Druzyna7 vs Druzyna8", "typ": "1", "kurs": 1.60, "pewnosc_pct": 66, "ryzyko": ["Rotacja kadry spodziewana", "Gra na neutralnym boisku", "Niepewna dyspozycja"]}},
+      {{"nr": 5, "mecz": "Druzyna9 vs Druzyna10", "typ": "BTTS", "kurs": 1.75, "pewnosc_pct": 63, "ryzyko": ["Bramkarz gośćmi w formie", "Taktyka jeden-nil", "Brak ofensywy ostatnio"]}}
     ],
     "kurs_laczny": 19.2,
     "szansa_wygranej_pct": 9.7,
-    "wygrana_netto": 84.5
+    "wygrana_netto": 84.5,
+    "ryzyko_ogolne": "Bardzo wysoki kurs 19.2 — realnie szansa <10% na zwycięstwo"
   }},
   "ostrzezenia": "2-3 zdania o ryzykach"
 }}
@@ -1203,7 +1222,12 @@ ZAKAZY BEZWZGLEDNE:
 - BetBuilder (Over+BTTS z jednego meczu): ZABRONIONE.
 - Maks. 2 mecze z tej samej ligi w jednym kuponie.
 - Każda noga musi mieć pewnosc_pct >= 60% — nie dokładaj nóg poniżej tego progu.
-- Wspólne nogi A↔B: dozwolone TYLKO przy pewnosc_pct >= 75%. Poniżej 75% — unikalne dla jednego kuponu."""
+- Wspólne nogi A↔B: dozwolone TYLKO przy pewnosc_pct >= 75%. Poniżej 75% — unikalne dla jednego kuponu.
+
+REGUŁY SCEPTYCYZMU:
+- WYSOKA PEWNOŚĆ (75-100%) + WYSOKI KURS (>2.00) = DRASTYCZNE OBNIŻENIE. To jest kombinacja ryzyka.
+- Jeśli nie możesz wymienić 3 mocnych argumentów PRZECIWKO, obniż pewność o 15-25 punktów.
+- Każdy typ musi mieć pole "ryzyko" z 3 argumentami. Brak ryzyko = niedoanaliza."""
 
     # Inject RAG similar matches for historical context (learning from past)
     if wyniki:
