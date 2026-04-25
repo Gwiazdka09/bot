@@ -366,19 +366,20 @@ class SettleRequest(BaseModel):
 
 @app.get("/api/matches/today")
 def get_matches_today():
-    """Zwraca TYLKO mecze w przyszłości (data+godzina > teraz), posortowane po dacie i godzinie."""
+    """Zwraca TYLKO mecze w ciągu 48h od teraz (data+godzina > teraz AND data+godzina <= teraz+48h), posortowane po dacie i godzinie."""
     global _MATCHES_CACHE
     preds = _fetch_predictions()
     now = datetime.now()
+    cutoff = now + timedelta(hours=48)
 
-    # Filtruj mecze w przyszłości
+    # Filtruj mecze w oknie 48h
     future_matches = []
     for m in preds:
         data_str = m.get("data", "")
         godzina_str = m.get("godzina", "")
         try:
             match_datetime = datetime.strptime(f"{data_str} {godzina_str}", "%Y-%m-%d %H:%M")
-            if match_datetime > now:
+            if now < match_datetime <= cutoff:
                 future_matches.append(m)
         except (ValueError, TypeError):
             # Ignoruj mecze z nieprawidłowym formatem daty/godziny
@@ -387,7 +388,7 @@ def get_matches_today():
     # Sortuj po dacie, potem po godzinie
     future_matches.sort(key=lambda m: (m.get("data", ""), m.get("godzina", "")))
 
-    _MATCHES_CACHE = future_matches[:15] if future_matches else preds[:15]
+    _MATCHES_CACHE = future_matches[:15] if future_matches else []
     return _MATCHES_CACHE
 
 
