@@ -170,6 +170,7 @@ def settle_active_coupons(
                             "UPDATE coupons SET status=?, payout_pln=?, roi_pct=? WHERE id=?",
                             (new_status, payout, roi, coupon_id),
                         )
+                        print(f"[DB] Kupon #{coupon_id} updated: status={new_status} | payout={payout} | roi={roi}")
                     _send_to_rag_feedback(coupon_id, legs, f"Leg #{leg_idx + 1} przegrany", verbose=verbose)
                     stats["settled"] += 1
                 except Exception as e:
@@ -202,6 +203,7 @@ def settle_active_coupons(
                         "UPDATE coupons SET status=?, payout_pln=?, roi_pct=? WHERE id=?",
                         (new_status, payout, roi, coupon_id),
                     )
+                    print(f"[DB] Kupon #{coupon_id} updated: status={new_status} | payout={payout} | roi={roi}")
 
                     # Dla WIN: aktualizuj bankroll
                     if all_correct and payout > 0:

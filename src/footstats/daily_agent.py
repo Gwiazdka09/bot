@@ -575,6 +575,18 @@ def main():
         except Exception as e:
             console.print(f"[dim]Analiza porażek (feedback): {e}[/dim]")
 
+        # Krok 0c: Rozliczenie ACTIVE kuponów (Settlement)
+        try:
+            from footstats.core.coupon_settlement import settle_active_coupons
+            stats_settle = settle_active_coupons(days_back=7, dry_run=False, verbose=True)
+            if stats_settle["settled"] > 0:
+                console.print(
+                    f"[green]Rozliczono {stats_settle['settled']} kuponów | "
+                    f"Częściowych: {stats_settle['partial']} | Błędów: {stats_settle['errors']}[/green]"
+                )
+        except Exception as e:
+            console.print(f"[dim]Błąd settlement kuponów: {e}[/dim]")
+
     _sep("KROK 1 — Bzzoiro ML")
     wyniki, indeks = _pobierz_kandydatow(dni=args.dni)
 
