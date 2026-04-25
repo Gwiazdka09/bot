@@ -19,52 +19,56 @@ from langfuse import Langfuse
 # Importy z pakietu footstats
 from footstats.ai.client import zapytaj_ai
 from footstats.scrapers.kursy import szukaj_kursy_meczu, scrape_betexplorer, pokaz_dostepne_ligi
+from footstats.data.context_scraper import get_match_context
 
 # ── Langfuse Initialization ────────────────────────────────────────────────
-_langfuse: Langfuse | None = None
-
-def _get_langfuse() -> Langfuse | None:
-    """Initialize Langfuse if credentials present."""
-    global _langfuse
-    if _langfuse is None:
-        public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
-        secret_key = os.getenv("LANGFUSE_SECRET_KEY")
-        if public_key and secret_key:
-            _langfuse = Langfuse(
-                public_key=public_key,
-                secret_key=secret_key,
-                host=os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
-            )
-    return _langfuse
+from langfuse import Langfuse
+try:
+    langfuse = Langfuse(
+        public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+        secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+        host=os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+    )
+except Exception as e:
+    print(f"DEBUG: Langfuse init error: {e}")
+    langfuse = None
 
 
 # ── Wyspecjalizowany prompt typerski ────────────────────────────────────────
 _SYSTEM_TYPER = """Jesteś BEZWZGLĘDNYM ANALITYKIEM DANYCH BUKMACHERSKICH. Nie bądź miły — bądź precyzyjny.
 
 KRYTERIA DECYZJI:
-1. FORMA (60% wagi): Przeanalizuj ostatnie 5 meczów każdej drużyny. Zwycięstwa vs porażki. Gole dla/przeciw. Trend wzrostowy czy spadkowy?
-2. H2H (20% wagi): Historia bezpośrednich starć. Kto wygrywa, gole, pattern.
-3. KURSY (20% wagi): Jeśli kurs na faworyta <1.40, ODRZUĆ ten typ. Szukaj innego rynku (Over 2.5, BTTS, itp).
-
+1. VALUE BETTING (PRIORYTET): Twoim celem jest znalezienie przewagi nad bukmacherem (Value), a nie tylko wskazanie faworyta.
+   Jeśli kurs na czyste zwycięstwo (1 lub 2) jest niższy niż 1.60, zabraniam wystawiania tego typu.
+   W takim przypadku przeanalizuj alternatywy o wyższym kursie (1.65 - 2.20): Over 2.5 gola, BTTS (Obie strzelą), lub Handicap -1.5.
+2. FORMA (60% wagi): Przeanalizuj ostatnie 5 meczów każdej drużyny. Zwycięstwa vs porażki. Gole dla/przeciw. Trend wzrostowy czy spadkowy?
+3. H2H (20% wagi): Historia bezpośrednich starć. Kto wygrywa, gole, pattern.
 PRZED WYSTAWIENIEM TYPU:
 - Podsumuj formę: "Ostatnie 5: W-W-P-W-W (trend +)"
 - Podsumuj H2H: "3x Drużyna A wygrała, średnio 2.3 gola/mecz"
 - Sprawdź kursy: "Faworytu <1.40 — UNIKAJ tego typu"
 
 PEWNOŚĆ (confidence_score 0-100):
-- 85-100: Forma wyraźna + H2H jasne + kurs rozumny
-- 70-84: Forma ok + H2H mieszane + kurs powiedzmy
-- 50-69: Brak jasnego trendu, ryzykowne
-- <50: ODRZUĆ (nigdy nie stawiaj)
+- 80-100: Silny sygnał. Forma wyraźna lub przekonujące H2H. Bądź decyzyjny!
+- 65-79: Sensowny typ z racjonalnymi argumentami. Nie bój się dawać not 70-80, gdy dane wskazują faworyta!
+- <65: Niska pewność, omijać.
 
-JSON SCHEMA (OBOWIĄZKOWY):
+JSON SCHEMA (OBOWIĄZKOWY - Zwróć wyłącznie JSON):
 {
   "typ": "1" | "2" | "X" | "Over 2.5" | "Under 2.5" | "BTTS" | "No BTTS",
   "kurs": 1.80,
   "pewnosc_pct": 75,
-  "uzasadnienie": "Krótko: forma, H2H, kursy.",
+  "risks_analysis": ["ryzyko 1", "ryzyko 2", "ryzyko 3"],
+  "uzasadnienie": "Krótko: dlaczego ten typ mimo ryzyk?",
   "value_bet": true | false
 }
+
+== DEVIL'S ADVOCATE (OBOWIĄZKOWE) ==
+Twoim zadaniem jest przeprowadzenie "ataku" na własną sugestię typu.
+1. Wygeneruj dokładnie 3 najsilniejsze argumenty PRZECIWKO sugerowanemu typowi (np. kontuzje, xG rywala, zmęczenie).
+2. Umieść je w polu "risks_analysis".
+3. Dopiero PO analizie ryzyk oblicz ostateczny "pewnosc_pct".
+4. Każde istotne ryzyko musi realnie obniżać pewność (np. brak kluczowego gracza = -10 pkt).
 
 Odpowiadaj zawsze po polsku. Zawsze zwracaj JSON. Bądź konkretny.
            Over 1.5 gdy obie druzyny strzelaja regularnie, wynik klasy A vs D).
@@ -253,7 +257,8 @@ def _zapytaj_typera(prompt: str, max_tokens: int = 900) -> str:
     if liga_blok:
         system += f"\n\n{liga_blok}\n"
 
-    langfuse = _get_langfuse()
+    if langfuse:
+        pass
 
     try:
         import groq as groq_lib
@@ -407,6 +412,8 @@ def analizuj_mecz_ai(
         value_1 = value_2 = value_x = False
         kursy_tekst = "\nKURSY BUKMACHERSKIE: brak danych\n"
 
+    rag_context = _pobierz_podobne_mecze(gospodarz, goscie)
+    
     prompt = f"""Analizujesz mecz piłkarski i musisz podać typ bukmacherski.
 
 ═══════════════════════════════════════
@@ -427,25 +434,20 @@ FORMA:
 
 HISTORIA BEZPOŚREDNIA (H2H):
   {h2h_opis}
+{rag_context}
 {value_info}
 KOMENTARZ FOOTSTATS:
   {komentarz_footstats or 'brak'}
 ═══════════════════════════════════════
 
-ZADANIE – oceń mecz i wybierz JEDEN najlepszy typ spośród:
-  1     – wygrana gospodarza
-  X     – remis
-  2     – wygrana gości
-  1X    – gospodarz lub remis
-  X2    – remis lub goście
-  BTTS  – obie drużyny strzelą
-  Over  – ponad 2.5 gola
-  Under – poniżej 2.5 gola
+ZADANIE – Wykonaj analizę "Devil's Advocate" podając 3 ryzyka, a następnie wybierz JEDEN najlepszy typ spośród:
+  1, X, 2, 1X, X2, BTTS, Over, Under
 
 Odpowiedź TYLKO w formacie JSON (bez żadnego tekstu przed ani po):
 {{
   "typ": "1",
   "pewnosc": 74,
+  "risks_analysis": ["ryzyko 1", "ryzyko 2", "ryzyko 3"],
   "uzasadnienie": "Krótkie 2-3 zdania po polsku wyjaśniające wybór.",
   "value_bet": false,
   "value_bet_opis": "Opis value bet jeśli istnieje, inaczej pusta string.",
@@ -454,7 +456,16 @@ Odpowiedź TYLKO w formacie JSON (bez żadnego tekstu przed ani po):
 }}"""
 
     print(f"\n[AI] Analizuję: {gospodarz} vs {goscie}...")
-    surowa_odpowiedz = zapytaj_ai(prompt, max_tokens=500)
+    
+    surowa_odpowiedz = None
+    if langfuse:
+        with langfuse.start_as_current_observation(name=f"Analiza: {gospodarz} vs {goscie}", as_type="span"):
+            with langfuse.start_as_current_observation(name="Groq Inference", as_type="generation", model="llama-3.1-8b-instant", input=prompt) as gen:
+                surowa_odpowiedz = zapytaj_ai(prompt, max_tokens=500)
+                gen.update(output=surowa_odpowiedz)
+    else:
+        surowa_odpowiedz = zapytaj_ai(prompt, max_tokens=500)
+        
     wynik = _wyciagnij_json(surowa_odpowiedz)
 
     # Dodaj metadane
@@ -739,6 +750,25 @@ def _buduj_opis_meczu(w: dict) -> str:
         linie.append(
             f"  FORMA_SOFA: {g[:8]}={sofa_g or '?'}  {a[:8]}={sofa_a or '?'}"
         )
+    
+    # Rich Context: xG, Table, Absences
+    ctx = w.get("match_context") or {}
+    if ctx:
+        xg_h = ctx.get("home_xg_last3", [])
+        xg_a = ctx.get("away_xg_last3", [])
+        if xg_h or xg_a:
+            linie.append(f"  xG_LAST3: {g[:8]}={xg_h}  {a[:8]}={xg_a}")
+        
+        pos_h = ctx.get("home_table_pos")
+        pos_a = ctx.get("away_table_pos")
+        if pos_h or pos_a:
+            linie.append(f"  TABELA: {g[:8]}=#{pos_h or '?'}  {a[:8]}=#{pos_a or '?'}")
+            
+        abs_h = ctx.get("home_absences", [])
+        abs_a = ctx.get("away_absences", [])
+        if abs_h or abs_a:
+            linie.append(f"  KONTEKST_ABSENCJE: {g[:8]}:{abs_h} | {a[:8]}:{abs_a}")
+
     inj_g = w.get("sofa_kontuzje_g")
     inj_a = w.get("sofa_kontuzje_a")
     if inj_g or inj_a:
@@ -1075,9 +1105,15 @@ def ai_analiza_pewniaczki(
     if not wyniki:
         return {"_raw": "Brak pewniaczków do analizy."}
 
-    # Etap 4: Wzbogać TOP 5 meczów o formę SofaScore (modyfikuje wyniki in-place)
+    # Etap 4: Wzbogać TOP 10 meczów o formę SofaScore i stats context
     if pobierz_forme:
-        _wzbogac_forme(wyniki, top_n=5)
+        _wzbogac_forme(wyniki, top_n=10)
+        # Dodatkowy kontekst xG/Table dla TOP5
+        for w in wyniki[:5]:
+            try:
+                w["match_context"] = get_match_context(w.get("gospodarz",""), w.get("goscie",""), w.get("liga",""))
+            except Exception:
+                pass
 
     # Etap 3: Dynamiczne podsumowanie sygnałów
     sygnaly = _sygnaly_summary(wyniki)
@@ -1176,9 +1212,7 @@ ZAKAZY BEZWZGLEDNE:
         rag_similar = _pobierz_podobne_mecze(home, away, n=3)
         prompt = f"{prompt}{rag_similar}"
 
-    # Langfuse observability (optional, no-op if missing credentials)
-    langfuse = _get_langfuse()
-
+    # Langfuse observability is handled globally
     tekst = _zapytaj_typera(prompt, max_tokens=1400)
     dane = _wyciagnij_json(tekst)
     if "top3" not in dane:

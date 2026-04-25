@@ -21,7 +21,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-DB_PATH  = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
+from footstats.config import DB_PATH
 MIN_HIST = 5   # min meczów drużyny w historii żeby liczyć lambdę
 
 

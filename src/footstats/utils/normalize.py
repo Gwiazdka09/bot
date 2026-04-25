@@ -72,6 +72,7 @@ def _remove_prefixes_suffixes(tokens: list[str]) -> list[str]:
 
 
 _DEFAULT_MAPPINGS: dict[str, str] = {
+    "barca":               "barcelona",
     "paris saint germain": "psg",
     "paris sg":            "psg",
     "psg":                 "psg",

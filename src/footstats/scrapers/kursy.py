@@ -217,7 +217,7 @@ if __name__ == "__main__":
         liga = input("Wybierz ligę (np. premier-league): ").strip() or "premier-league"
 
     print(f"\nScrapuję kursy dla: {liga}")
-    wyniki = scrape_betexplorer(liga, headless=False)  # headless=False = widzisz przeglądarkę
+    wyniki = scrape_betexplorer(liga, headless=True)   # headless=True = nie widzisz okna
 
     if wyniki:
         print(f"\nPierwsze 5 meczów:")

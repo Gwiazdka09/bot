@@ -1,0 +1,12 @@
+[server]
+headless = true
+serverAddress = "0.0.0.0"
+serverPort = 8501
+
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501
+# Disable auto-opening the browser
+# This prevents focus stealing during automated runs
+gatherUsageStats = false

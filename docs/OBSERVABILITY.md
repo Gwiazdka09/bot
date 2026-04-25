@@ -66,7 +66,7 @@ def ai_analiza_pewniaczki(...):
         # Loguj Groq call
         with langfuse.span(name="groq_api_call"):
             response = groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant",
                 messages=[...],
                 temperature=0.7
             )

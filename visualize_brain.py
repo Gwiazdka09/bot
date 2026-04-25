@@ -23,7 +23,7 @@ def create_brain_graph():
 
         # AI/RAG (fioletowy)
         {'id': 'analyzer', 'label': 'analyzer.py\n(LLM)', 'color': '#9370DB',
-         'title': 'Groq llama-3.3-70b\nMain coupon generation\nReads ai_feedback for lessons',
+         'title': 'Groq llama-3.1-8b-instant\nMain coupon generation\nReads ai_feedback for lessons',
          'size': 40, 'font': {'size': 16, 'bold': 'true'}, 'shape': 'dot'},
         {'id': 'post_match_analyzer', 'label': 'post_match_analyzer.py\n(RAG)', 'color': '#BA55D3',
          'title': 'AI Feedback Loop (Etap 7)\nGeneruje wnioski z przegranym kuponów\nWpisuje do ai_feedback table',

@@ -30,7 +30,8 @@ from footstats.core.coupon_tracker import (
     init_coupon_tables,
     STATUS_ACTIVE,
 )
-from footstats.core.backtest import init_db, update_result, _oblicz_tip_correct
+from footstats.core.backtest import init_db, update_result
+from footstats.utils.betting import oblicz_tip_correct
 from footstats.core.bankroll import process_win
 
 console = Console()
@@ -217,7 +218,7 @@ def run_evening_agent(date_str: str | None = None) -> dict:
                 nogi_statusy.append("PENDING")
                 continue
 
-            correct = _oblicz_tip_correct(ai_tip, wynik)
+            correct = oblicz_tip_correct(ai_tip, wynik)
             nogi_statusy.append("WIN" if correct == 1 else ("LOSS" if correct == 0 else "VOID"))
             nowe_wyniki += 1
 

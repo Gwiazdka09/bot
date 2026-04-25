@@ -19,6 +19,10 @@ import os
 import time
 from datetime import datetime, timedelta
 from typing import Optional
+from dotenv import load_dotenv
+
+# Załaduj .env na samym początku
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -29,57 +33,30 @@ logger = logging.getLogger(__name__)
 _langfuse = None
 
 
-def _init_langfuse():
-    """Inicjalizuje Langfuse jeśli klucze dostępne. Bezpieczne — nie rzuca wyjątku."""
+# ---------------------------------------------------------------------------
+#  Langfuse
+# ---------------------------------------------------------------------------
+
+def _get_langfuse_client():
     global _langfuse
-    if _langfuse is not None:
+    if _langfuse:
         return _langfuse
     try:
-        pk = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
-        sk = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
-        if pk and sk:
-            from langfuse import Langfuse
-            host = os.getenv("LANGFUSE_BASE_URL") or os.getenv("LANGFUSE_HOST") or "https://cloud.langfuse.com"
-            _langfuse = Langfuse(
-                public_key=pk,
-                secret_key=sk,
-                host=host,
-            )
-            logger.info(f"Langfuse aktywny ({host}) — trace'y będą logowane")
-        else:
-            _langfuse = False  # sentinel: brak kluczy
-    except Exception as e:
-        logger.warning(f"Langfuse niedostępny: {e}")
-        _langfuse = False
-    return _langfuse
+        from langfuse import Langfuse
+        import os
+        pk = os.getenv('LANGFUSE_PUBLIC_KEY', '').strip()
+        sk = os.getenv('LANGFUSE_SECRET_KEY', '').strip()
+        if not pk or not sk:
+            return None
+        _langfuse = Langfuse(
+            public_key=pk,
+            secret_key=sk,
+            host=os.getenv('LANGFUSE_HOST', 'https://cloud.langfuse.com')
+        )
+        return _langfuse
+    except Exception:
+        return None
 
-
-class _LangfuseTrace:
-    """Context manager do opcjonalnego trace'owania. No-op gdy brak Langfuse."""
-
-    def __init__(self, name: str, metadata: dict | None = None):
-        self.name = name
-        self.metadata = metadata or {}
-        self._trace = None
-
-    def __enter__(self):
-        lf = _init_langfuse()
-        if lf and lf is not False:
-            try:
-                self._trace = lf.trace(name=self.name, metadata=self.metadata)
-            except Exception:
-                pass
-        return self
-
-    def __exit__(self, *args):
-        pass
-
-    def event(self, name: str, **kwargs):
-        if self._trace:
-            try:
-                self._trace.event(name=name, metadata=kwargs)
-            except Exception:
-                pass
 
 
 # ---------------------------------------------------------------------------
@@ -199,12 +176,10 @@ def _run_ai_analysis(wyniki_batch: list[dict], stawka: float = 5.0) -> dict | No
         # 429 / Rate Limit — czekaj i loguj, nie wywalaj
         if "429" in err_str or "rate" in err_str or "too many requests" in err_str:
             logger.warning(f"[429] Groq rate limit — czekamy 30s i pomijamy batch: {e}")
-            lf = _init_langfuse()
-            if lf and lf is not False:
+            lf = _get_langfuse_client()
+            if lf:
                 try:
-                    lf.trace(name="backtest_rate_limit",
-                             metadata={"batch_size": len(wyniki_batch), "error": str(e)}).event(
-                        name="groq_429_hit")
+                    lf.event(name="groq_429_hit", metadata={"batch_size": len(wyniki_batch), "error": str(e)})
                 except Exception:
                     pass
             time.sleep(30)  # Czekaj przed następnym batchemm
@@ -266,18 +241,23 @@ def _evaluate_tip(tip: dict, fixture: dict) -> dict:
 
     CONFIDENCE FILTER: Tipy z pewnosci < 75 będą oznaczone do pominięcia.
     """
-    from footstats.core.backtest import _oblicz_tip_correct
+    from footstats.utils.betting import oblicz_tip_correct
 
     score_str = fixture["score_str"]
     ai_tip = tip["typ"]
     kurs = tip.get("kurs") or 1.0
     pewnosc = tip.get("pewnosc", 65)
 
-    tip_correct = _oblicz_tip_correct(ai_tip, score_str)
+    tip_correct = oblicz_tip_correct(ai_tip, score_str)
     is_win = tip_correct == 1
 
-    # CONFIDENCE FILTER: Mark tips below 75% for skipping
-    skip_low_confidence = pewnosc < 75
+    # CONFIDENCE FILTER: Mark tips below 65% for skipping
+    skip_low_confidence = pewnosc < 65
+
+    # VALUE BET FILTER: Ignore outright wins (1 or 2) with odds below 1.60
+    skip_low_value = False
+    if ai_tip in ("1", "2") and kurs < 1.60:
+        skip_low_value = True
 
     return {
         "fixture_id": fixture["fixture_id"],
@@ -293,6 +273,7 @@ def _evaluate_tip(tip: dict, fixture: dict) -> dict:
         "is_win": is_win,
         "source": tip.get("source", ""),
         "skip_low_confidence": skip_low_confidence,
+        "skip_low_value": skip_low_value,
     }
 
 
@@ -319,8 +300,13 @@ def _save_prediction_and_result(eval_result: dict, stawka: float) -> int | None:
         return None
 
 
-def _generate_rag_lesson(eval_result: dict) -> str:
-    """Generuje lekcję RAG z przegranej predykcji (bez Groq — deterministycznie)."""
+def _generate_rag_lesson_ai(eval_result: dict) -> str:
+    """
+    Generuje lekcję RAG z przegranej predykcji używając modelu llama-3.1-8b-instant.
+    Reflexion Pattern: AI analizuje błąd na podstawie wyniku.
+    """
+    from footstats.ai.client import zapytaj_ai
+    
     home = eval_result["home"]
     away = eval_result["away"]
     tip = eval_result["ai_tip"]
@@ -328,42 +314,38 @@ def _generate_rag_lesson(eval_result: dict) -> str:
     league = eval_result["league"]
     pewnosc = eval_result["pewnosc"]
 
-    # Analiza dlaczego pudło
-    gh, ga = [int(x) for x in score.split("-")]
-    total = gh + ga
+    prompt = f"""Jesteś analitykiem piłkarskim oceniającym przegrany typ bukmacherski (Reflexion Pattern).
 
-    reason_parts = []
-    tip_upper = tip.upper()
+MECZ: {home} vs {away} ({league})
+TYP AI: {tip} (Pewność: {pewnosc}%)
+WYNIK FAKTYCZNY: {score}
 
-    if tip_upper in ("1", "X", "2"):
-        if gh > ga:
-            actual = "1"
-        elif gh == ga:
-            actual = "X"
+ZADANIE: Wygeneruj krótką "Lekcję" (Lesson Learned) w 2 zdaniach po polsku.
+1. Co poszło nie tak? (np. niedocenienie obrony, błąd w xG, zlekceważenie formy wyjazdowej).
+2. Czego model ma unikać w przyszłości przy tych drużynach/lidze?
+
+Odpowiedz wyłącznie tekstem wniosku, bez nagłówków.
+"""
+    
+    logger.info(f"Generuję AI Post-Mortem dla {home} vs {away}...")
+    
+    lf = _get_langfuse_client()
+    lesson = ""
+    
+    try:
+        if lf:
+            with lf.start_as_current_observation(name="AI Reflexion (Post-Mortem)", as_type="generation", model="llama-3.1-8b-instant", input=prompt) as gen:
+                lesson = zapytaj_ai(prompt, max_tokens=250).strip()
+                gen.update(output=lesson)
         else:
-            actual = "2"
-        reason_parts.append(
-            f"Typowaliśmy {tip} ({pewnosc}% pewności), wynik {score} → {actual}."
-        )
-    elif "OVER" in tip_upper:
-        threshold = 2.5
-        if "1.5" in tip:
-            threshold = 1.5
-        elif "3.5" in tip:
-            threshold = 3.5
-        reason_parts.append(
-            f"Typowaliśmy {tip}, ale padło {total} goli (próg {threshold})."
-        )
-    elif "BTTS" in tip_upper:
-        btts = gh > 0 and ga > 0
-        reason_parts.append(
-            f"Typowaliśmy BTTS={'Tak' if 'NO' not in tip_upper else 'Nie'}, "
-            f"wynik {score} → BTTS={'Tak' if btts else 'Nie'}."
-        )
+            lesson = zapytaj_ai(prompt, max_tokens=250).strip()
+    except Exception as e:
+        logger.warning(f"Błąd AI Reflexion: {e}. Fallback do lekcji deterministycznej.")
+        # Fallback do starej logiki deterministycznej
+        gh, ga = [int(x) for x in score.split("-")]
+        lesson = f"[BACKTEST] {home} vs {away}: Typ {tip} ({pewnosc}%) vs wynik {score}. Sprawdź defensywę."
 
-    reason_parts.append(f"Liga: {league}. Zweryfikuj formę drużyn przed typowaniem w tej lidze.")
-
-    return f"[BACKTEST] {home} vs {away}: " + " ".join(reason_parts)
+    return lesson
 
 
 def _save_rag_feedback(pred_id: int, eval_result: dict, lesson: str):
@@ -392,8 +374,8 @@ def _save_rag_feedback(pred_id: int, eval_result: dict, lesson: str):
 
 def _flush_langfuse():
     """Wysyła wszystkie queued trace'y do Langfuse. Musi być na końcu."""
-    lf = _init_langfuse()
-    if lf and lf is not False:
+    lf = _get_langfuse_client()
+    if lf:
         try:
             lf.flush()
             logger.info("Langfuse flush() — dane wysłane do serwera")
@@ -453,11 +435,20 @@ def backtest_period(
         "details": [],
     }
 
+    seen_fixture_ids = set()  # Global deduplication across all days in this run
+
     for day_offset in range(1, days_back + 1):
         date = today - timedelta(days=day_offset)
         date_str = date.strftime("%Y-%m-%d")
 
-        with _LangfuseTrace("backtest_day", {"date": date_str, "stawka": stawka}) as trace:
+        import contextlib
+        lf = _get_langfuse_client()
+        if lf:
+            trace_ctx = lf.start_as_current_observation(name="backtest_day", as_type="span")
+        else:
+            trace_ctx = contextlib.nullcontext()
+
+        with trace_ctx as trace:
 
             # Zlicz dzień na START (niezależnie od liczby meczów)
             stats["days_analyzed"] += 1
@@ -468,10 +459,9 @@ def backtest_period(
                 logger.info(f"[{date_str}] Brak meczów — pomijam")
                 continue
             stats["total_fixtures"] += len(fixtures)
-            trace.event("fixtures_fetched", count=len(fixtures))
+            if lf and trace: trace.create_event(name="fixtures_fetched", input={"count": len(fixtures)})
 
             # 2. Deduplikuj mecze na podstawie fixture_id (usuwamy duplikaty z API)
-            seen_fixture_ids = set()
             unique_fixtures = []
             for f in fixtures:
                 fid = f.get("fixture_id")
@@ -499,23 +489,32 @@ def backtest_period(
                 if batch_start > 0:
                     time.sleep(5)
 
-                trace.event("ai_analysis_start", batch_size=len(batch))
+                if lf and trace: trace.create_event(name="ai_analysis_start", input={"batch_size": len(batch)})
                 analysis = _run_ai_analysis(batch, stawka=stawka)
+                
+                time.sleep(2) # Trottling API Groq
+
 
                 if not analysis or "_raw" in analysis:
                     logger.warning(f"[{date_str}] AI nie zwróciło JSON — pomijam batch")
-                    trace.event("ai_analysis_failed")
+                    if lf and trace: trace.create_event(name="ai_analysis_failed")
                     continue
 
                 # 3. Wyciągnij tipy i ewaluuj
                 tips = _extract_tips_from_analysis(analysis)
-                trace.event("tips_extracted", count=len(tips))
+                if lf and trace: trace.create_event(name="tips_extracted", input={"count": len(tips)})
 
+                processed_batch_fixture_ids = set()  # Deduplikacja na poziomie predykcji w tym batchu
                 for tip in tips:
                     matched_fixture = _match_tip_to_fixture(tip, batch_fixtures)
                     if not matched_fixture:
                         stats["unknown"] += 1
                         continue
+
+                    fid = matched_fixture["fixture_id"]
+                    if fid in processed_batch_fixture_ids:
+                        continue
+                    processed_batch_fixture_ids.add(fid)
 
                     eval_result = _evaluate_tip(tip, matched_fixture)
                     stats["total_tips"] += 1
@@ -524,29 +523,46 @@ def backtest_period(
                         stats["unknown"] += 1
                         continue
 
-                    # CONFIDENCE FILTER: Skip predictions with confidence < 75%
-                    if eval_result["skip_low_confidence"]:
+                    # CONFIDENCE FILTER: Skip predictions with confidence < 65%
+                    if eval_result.get("skip_low_confidence", False):
                         stats["skipped_low_confidence"] += 1
+                        continue
+
+                    # VALUE FILTER: Ignore < 1.60 odds on wins
+                    if eval_result.get("skip_low_value", False):
                         continue
 
                     # 4. Zapisz predykcję + wynik
                     pred_id = _save_prediction_and_result(eval_result, stawka)
 
+                    # DYNAMIC STAKING: Use multipliers based on confidence and odds
+                    from footstats.core.kelly import dynamic_stake
+                    actual_stake = dynamic_stake(eval_result["pewnosc"], eval_result["kurs"], base_stake=stawka)
+                    
+                    if lf and trace:
+                        trace.create_event(name="dynamic_stake_applied", metadata={
+                            "confidence": eval_result["pewnosc"],
+                            "odds": eval_result["kurs"],
+                            "base_stake": stawka,
+                            "actual_stake": actual_stake,
+                            "match": f"{eval_result['home']} vs {eval_result['away']}"
+                        })
+
                     if eval_result["is_win"]:
                         stats["wins"] += 1
-                        profit = stawka * (eval_result["kurs"] - 1) * 0.88  # po 12% podatku
+                        profit = actual_stake * (eval_result["kurs"] - 1) * 0.88  # po 12% podatku
                         stats["theoretical_profit_pln"] += profit
-                        trace.event("tip_win", tip=eval_result["ai_tip"],
-                                    match=f"{eval_result['home']} vs {eval_result['away']}")
+                        if lf and trace: trace.create_event(name="tip_win", input={"tip": eval_result["ai_tip"],
+                                    "match": f"{eval_result['home']} vs {eval_result['away']}"})
                     else:
                         stats["losses"] += 1
-                        stats["theoretical_profit_pln"] -= stawka
-                        trace.event("tip_loss", tip=eval_result["ai_tip"],
-                                    match=f"{eval_result['home']} vs {eval_result['away']}")
+                        stats["theoretical_profit_pln"] -= actual_stake
+                        if lf and trace: trace.create_event(name="tip_loss", input={"tip": eval_result["ai_tip"],
+                                    "match": f"{eval_result['home']} vs {eval_result['away']}"})
 
                         # 5. RAG feedback dla pudeł
                         if pred_id:
-                            lesson = _generate_rag_lesson(eval_result)
+                            lesson = _generate_rag_lesson_ai(eval_result)
                             _save_rag_feedback(pred_id, eval_result, lesson)
                             stats["new_rag_lessons"] += 1
 
@@ -582,7 +598,7 @@ def print_report(stats: dict):
     print(f"  Meczów z API-Football:    {stats['total_fixtures']}")
     print(f"  Tipów AI wygenerowanych:  {stats['total_tips']}")
     print(f"  Niedopasowanych:          {stats['unknown']}")
-    print(f"  Pominięte (confidence<75%): {stats.get('skipped_low_confidence', 0)}")
+    print(f"  Pominięte (confidence<65%): {stats.get('skipped_low_confidence', 0)}")
     print("-" * 60)
     print(f"  ✅ Trafione (WIN):        {stats['wins']}")
     print(f"  ❌ Pudła (LOSE):          {stats['losses']}")

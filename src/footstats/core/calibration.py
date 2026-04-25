@@ -19,9 +19,7 @@ Multiplier jest stosowany jako czynnik do efektywnego bankrollu przed Kelly.
 from __future__ import annotations
 
 import sqlite3
-from pathlib import Path
-
-DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
+from footstats.config import DB_PATH
 
 # Kalibracja długoterminowa (10 kuponów)
 MULTIPLIER_HIGH    = 1.2

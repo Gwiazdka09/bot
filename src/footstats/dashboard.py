@@ -16,6 +16,8 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from footstats.config import DB_PATH
+
 # ── Konfiguracja ───────────────────────────────────────────────────────────────
 
 st.set_page_config(
@@ -24,8 +26,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
-
-DB_PATH = Path(__file__).parents[2] / "data" / "footstats_backtest.db"
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 

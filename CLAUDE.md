@@ -32,7 +32,7 @@ Jakub dał pełne uprawnienia do autonomicznego działania. **Nie pytaj o potwie
 
 ## Architektura AI (aktywna)
 
-- **Groq (llama-3.3-70b)** — główny LLM w `ai/analyzer.py` (`ai_analiza_pewniaczki`)
+- **Groq (llama-3.1-8b-instant)** — główny LLM w `ai/analyzer.py` (`ai_analiza_pewniaczki`)
 - **Pętla Feedbacku AI (Etap 7)** — `ai/post_match_analyzer.py`:
   - Po każdym przegranym kuponie Groq generuje wniosek → `ai_feedback` table
   - `pobierz_ostatnie_wnioski(n)` zwraca ostatnie N wpisów

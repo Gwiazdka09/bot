@@ -100,8 +100,15 @@ def _liga_ids_dla_nazwy(league_str: str) -> list[int]:
     Zwraca listę league_id do sprawdzenia dla danej nazwy ligi z DB.
     Używa fuzzy-match zamiast exact-match aby obsłużyć warianty nazw.
     """
+    # Ligi do śledzenia (tylko te będą odpytywane przez API w pierwszej kolejności)
+    TRACKED_LEAGUES_NAMES = [
+        'Premier League', 'La Liga', 'Bundesliga', 'Serie A', 
+        'Ligue 1', 'Ekstraklasa', 'Eredivisie', 'Primeira Liga'
+    ]
+    tracked_ids = [lid for lid, name in _LIGI_IDS.items() if name in TRACKED_LEAGUES_NAMES]
+    
     if not league_str:
-        return list(_LIGI_IDS.keys())
+        return tracked_ids
 
     # Spróbuj alias
     normalized = _ALIASY.get(_norm(league_str), _norm(league_str))
@@ -116,10 +123,15 @@ def _liga_ids_dla_nazwy(league_str: str) -> list[int]:
             best_id = lid
 
     if best_id is not None and best_score >= 0.55:
-        return [best_id]
-    # Nieznana liga — przeszukaj wszystkie
-    log.debug("Nieznana liga '%s' (best=%.2f) — szukam we wszystkich", league_str, best_score)
-    return list(_LIGI_IDS.keys())
+        if best_id in tracked_ids:
+            return [best_id]
+        
+        log.debug("Liga '%s' (id=%d) znaleziona, ale nie jest w TRACKED_LEAGUES — pomijam API.", league_str, best_id)
+        return []
+            
+    # Nieznana liga — nie marnujemy limitu API na strzelanie w ciemno
+    log.debug("Nieznana liga '%s' (best=%.2f) — pomijam API.", league_str, best_score)
+    return []
 
 
 def _fetch_fixtures(api_key: str, league_id: int, date_str: str) -> list[dict]:
@@ -138,9 +150,9 @@ def _fetch_fixtures(api_key: str, league_id: int, date_str: str) -> list[dict]:
         return []
 
 
-def _fixture_to_result(fixture: dict) -> tuple[str, str, str] | None:
+def _fixture_to_result(fixture: dict, api_key: str = None) -> tuple[str, str, str, dict] | None:
     """
-    Zwraca (home_name, away_name, wynik) np. ("PSG", "Lyon", "2-1").
+    Zwraca (home_name, away_name, wynik, stats) np. ("PSG", "Lyon", "2-1", {"xG": ...}).
     Zwraca None jeśli mecz nie jest ukończony.
     """
     status = fixture.get("fixture", {}).get("status", {}).get("short", "")
@@ -154,30 +166,62 @@ def _fixture_to_result(fixture: dict) -> tuple[str, str, str] | None:
     teams  = fixture.get("teams", {})
     home   = teams.get("home", {}).get("name", "")
     away   = teams.get("away", {}).get("name", "")
-    return home, away, f"{home_g}-{away_g}"
+    
+    # Pobierz statystyki jeśli mamy klucz
+    match_id = fixture.get("fixture", {}).get("id")
+    stats = {}
+    if api_key and match_id:
+        stats = _fetch_match_stats(api_key, match_id)
+
+    return home, away, f"{home_g}-{away_g}", stats
+
+
+def _fetch_match_stats(api_key: str, fixture_id: int) -> dict:
+    """Pobiera statystyki (xG, strzały) dla konkretnego meczu."""
+    try:
+        r = requests.get(
+            f"{API_BASE}/fixtures/statistics",
+            headers={"x-apisports-key": api_key},
+            params={"fixture": fixture_id},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json().get("response", [])
+        
+        res = {}
+        for team_stat in data:
+            t_name = team_stat.get("team", {}).get("name", "?")
+            s_list = team_stat.get("statistics", [])
+            t_stats = {s["type"]: s["value"] for s in s_list}
+            res[t_name] = t_stats
+        return res
+    except Exception as e:
+        log.debug("Match stats error (id=%s): %s", fixture_id, e)
+        return {}
 
 
 def _znajdz_wynik(
     pending: dict,
     fixtures: list[dict],
+    api_key: str = None,
     min_similarity: float = 0.70,
-) -> str | None:
+) -> tuple[str, dict] | None:
     """
     Dopasowuje pending mecz (team_home, team_away) do listy fixtures API.
-    Zwraca wynik np. "2-1" lub None jeśli brak dopasowania.
+    Zwraca (wynik, stats) lub None jeśli brak dopasowania.
     """
     ph = pending["team_home"]
     pa = pending["team_away"]
 
     for fix in fixtures:
-        parsed = _fixture_to_result(fix)
+        parsed = _fixture_to_result(fix, api_key)
         if parsed is None:
             continue
-        fh, fa, wynik = parsed
+        fh, fa, wynik, stats = parsed
         sim_h = _similar(ph, fh)
         sim_a = _similar(pa, fa)
         if sim_h >= min_similarity and sim_a >= min_similarity:
-            return wynik
+            return wynik, stats
 
     return None
 
@@ -241,25 +285,40 @@ def update_pending(
         for league_id in league_ids_to_try:
             cache_key = (match_date, league_id)
             if cache_key not in fixtures_cache:
-                if req_count >= 80:  # zostaw bufor 20 req
+                if req_count >= 75:  # Limit 75 requestów (zostaw bufor 25)
                     if verbose:
-                        print("[ResultsUpdater] Limit 80 requestów osiągnięty — stop.")
+                        print("[ResultsUpdater] Limit 75 requestów osiągnięty — przechodzę na Scraper.")
                     break
                 fixtures_cache[cache_key] = _fetch_fixtures(api_key, league_id, match_date)
                 req_count += 1
                 time.sleep(0.5)  # rate limit
 
-            wynik_found = _znajdz_wynik(p, fixtures_cache[cache_key])
-            if wynik_found:
+            wynik_data = _znajdz_wynik(p, fixtures_cache[cache_key], api_key)
+            if wynik_data:
+                wynik_found, stats_found = wynik_data
                 break
+
+        # FALLBACK: Scraper jeśli API nie znalazło lub limit osiągnięty
+        if not wynik_found:
+            try:
+                from footstats.scrapers.flashscore_results import get_match_result
+                if verbose:
+                    reason = "Limit API" if req_count >= 75 else "Brak w API"
+                    print(f"  [SCRAPER FALLBACK] {p['team_home']} vs {p['team_away']} ({reason})...")
+                
+                wynik_found = get_match_result(p["team_home"], p["team_away"], match_date)
+                if wynik_found:
+                    stats_found = {}  # Scraper nie dostarcza pełnych statystyk xG
+            except Exception as e:
+                log.debug("Fallback scraper error: %s", e)
 
         if wynik_found:
             if verbose:
                 status = "DRY" if dry_run else "UPDATE"
-                print(f"  [{status}] {p['team_home']} vs {p['team_away']} → {wynik_found}")
+                print(f"  [{status}] {p['team_home']} vs {p['team_away']} → {wynik_found} (+stats)")
             if not dry_run:
                 try:
-                    info = update_result(p["id"], wynik_found)
+                    info = update_result(p["id"], wynik_found, stats_found)
                     stats["updated"] += 1
                     # Powiadomienie Telegram jeśli dostępne
                     try:
@@ -311,7 +370,8 @@ def update_active_coupons(
         print("[CouponUpdater] Brak APISPORTS_KEY — pomijam aktualizację kuponów.")
         return {"closed": 0, "partial": 0, "errors": 0}
 
-    from footstats.core.backtest import _connect, _oblicz_tip_correct, init_db
+    from footstats.core.backtest import _connect, init_db
+    from footstats.utils.betting import oblicz_tip_correct
     init_db()
 
     today = datetime.now().date()
@@ -386,12 +446,26 @@ def update_active_coupons(
             away = leg.get("away", leg.get("mecz", "").split(" vs ")[-1])
             tip = leg.get("tip", "")
 
-            fixtures = _get_fixtures_for_date(match_date[:10])
+            fixtures = []
+            if req_count < 75:
+                fixtures = _get_fixtures_for_date(match_date[:10])
+            
             pending_mock = {"team_home": home, "team_away": away}
             wynik = _znajdz_wynik(pending_mock, fixtures)
 
+            # FALLBACK: Scraper dla kuponu (krytyczne!)
+            if not wynik:
+                try:
+                    from footstats.scrapers.flashscore_results import get_match_result
+                    if verbose:
+                        reason = "Limit API" if req_count >= 75 else "Brak w API"
+                        print(f"  [COUPON SCRAPER FALLBACK] {home} vs {away} ({reason})...")
+                    wynik = get_match_result(home, away, match_date[:10])
+                except Exception as e:
+                    log.debug("Coupon fallback scraper error: %s", e)
+
             if wynik:
-                correct = _oblicz_tip_correct(tip, wynik)
+                correct = oblicz_tip_correct(tip, wynik)
                 leg_results.append(correct)
                 if verbose:
                     symbol = "✓" if correct == 1 else ("✗" if correct == 0 else "?")

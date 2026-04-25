@@ -12,6 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
+from footstats.config import DB_PATH
 
 app = FastAPI(title="FootStats API", version="1.0")
 
@@ -23,8 +24,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
 
 def _get_conn():
     conn = sqlite3.connect(str(DB_PATH))

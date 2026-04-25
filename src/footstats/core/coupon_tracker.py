@@ -12,9 +12,7 @@ Użycie:
 
 import json
 import sqlite3
-from pathlib import Path
-
-DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
+from footstats.config import DB_PATH
 
 # Statusy kuponu
 STATUS_DRAFT   = "DRAFT"

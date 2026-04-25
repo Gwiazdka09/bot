@@ -6,9 +6,8 @@ Obsługuje trwałość salda w SQLite oraz logikę reinvestmentu.
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
-from footstats.config import AGENT_BANKROLL, AGENT_KELLY_FRACTION
+from footstats.config import AGENT_BANKROLL, AGENT_KELLY_FRACTION, DB_PATH
 
-DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
 
 def _connect() -> sqlite3.Connection:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)

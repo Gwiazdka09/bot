@@ -24,6 +24,8 @@ def _groq(prompt: str, max_tokens: int = 600) -> str | None:
     if not klucz:
         return None
     try:
+        import time
+        time.sleep(2)  # Throttling to prevent 429
         import groq as groq_lib
         client = groq_lib.Groq(api_key=klucz)
         resp = client.chat.completions.create(
@@ -75,7 +77,7 @@ def zapytaj_ai(prompt: str, max_tokens: int = 600) -> str:
     """
     odpowiedz = _groq(prompt, max_tokens)
     if odpowiedz:
-        print("[AI] Źródło: Groq (llama-3.3-70b)")
+        print("[AI] Źródło: Groq (llama-3.1-8b-instant)")
         return odpowiedz
 
     odpowiedz = _ollama(prompt)

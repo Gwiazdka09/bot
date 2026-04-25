@@ -78,6 +78,45 @@ def kelly_kupon(
     return kelly_stake(p_kupon, odds_kupon, bankroll, fraction)
 
 
+def dynamic_stake(
+    confidence_pct: int,
+    odds: float,
+    base_stake: float = 10.0,
+) -> float:
+    """
+    Uproszczony mnożnik stawki bazujący na pewności i kursie.
+    
+    Wzór:
+    - >= 80%  -> x1.5
+    - 75-79%  -> x1.2
+    - 70-74%  -> x1.0 (baza)
+    - 65-69%  -> x0.7
+    - < 65%   -> x0.5
+    
+    Dodatkowo: cap 0.8x jeśli kurs > 2.50 (ochrona przed wysoką zmiennością).
+    """
+    if confidence_pct >= 80:
+        multiplier = 1.5
+    elif confidence_pct >= 75:
+        multiplier = 1.2
+    elif confidence_pct >= 70:
+        multiplier = 1.0
+    elif confidence_pct >= 65:
+        multiplier = 0.7
+    else:
+        multiplier = 0.5
+        
+    # Risk adjustment for high odds
+    try:
+        o = float(odds)
+        if o > 2.50:
+            multiplier = min(multiplier, 0.8)
+    except (ValueError, TypeError):
+        pass
+        
+    return round(base_stake * multiplier, 1)
+
+
 def ev_netto(p: float, odds: float, podatek: float = 0.12) -> float:
     """
     Expected Value po podatku (Polska: 12% zryczałtowany).

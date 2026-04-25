@@ -1,191 +1,164 @@
 """
 flashscore_results.py – Fallback scraper wyników ze FlashScore dla starych meczów.
-
-Gdy API-Football nie zwraca wyniku, ten scraper pobiera dane ze FlashScore
-używając BeautifulSoup do parsowania wyników meczów.
-
-Użycie:
-    from flashscore_results import get_match_result
-    wynik = get_match_result("Arsenal", "Chelsea", "2026-04-15")  # "2-1" lub None
+Ulepszona wersja: korzysta z Flashscore.mobi (lekka wersja HTML) i lepszej normalizacji nazw.
 """
 
 import re
 import logging
+import requests
 from datetime import datetime, timedelta
 from pathlib import Path
+from bs4 import BeautifulSoup
+from difflib import SequenceMatcher
 
-try:
-    import requests
-    from bs4 import BeautifulSoup
-except ImportError:
-    print("ERROR: pip install requests beautifulsoup4 lxml")
-    raise
+from footstats.utils.normalize import normalize_team_name
 
 log = logging.getLogger(__name__)
 
-FLASHSCORE_URL = "https://www.flashscore.com"
+# Konfiguracja
+FLASHSCORE_MOBI_URL = "https://www.flashscore.mobi"
 CACHE_DIR = Path(__file__).parent.parent.parent / "cache" / "flashscore"
 
-
-def _norm_team_name(name: str) -> str:
-    """Normalizuje nazwę zespołu do wyszukiwania."""
-    name = re.sub(r"[^a-z0-9\s]", "", name.lower())
-    name = re.sub(r"\s+", "-", name.strip())
-    # Krótkie warianty
-    return name.replace("manchester united", "man-united")\
-               .replace("manchester city", "man-city")\
-               .replace("newcastle united", "newcastle")\
-               .replace("brighton hove albion", "brighton")
-
+def _similar(a: str, b: str) -> float:
+    """Podobieństwo dwóch znormalizowanych nazw."""
+    return SequenceMatcher(None, normalize_team_name(a), normalize_team_name(b)).ratio()
 
 def get_match_result(
     home_team: str,
     away_team: str,
-    match_date: str,  # YYYY-MM-DD
+    match_date: str,
     cache_enabled: bool = True,
 ) -> str | None:
     """
-    Pobiera wynik meczu ze FlashScore.
-
-    Args:
-        home_team: Nazwa drużyny gospodarza (np. "Arsenal")
-        away_team: Nazwa drużyny gościa (np. "Chelsea")
-        match_date: Data meczu w formacie YYYY-MM-DD
-        cache_enabled: Czy używać cache (cache/flashscore/YYYY-MM-DD.json)
-
-    Returns:
-        Wynik w formacie "2-1" lub None jeśli nie znaleziono
+    Pobiera wynik meczu ze FlashScore (mobi).
     """
     try:
-        from datetime import datetime as dt
-        date_obj = dt.fromisoformat(match_date)
-    except (ValueError, TypeError):
-        log.warning("Invalid date format: %s", match_date)
+        date_obj = datetime.fromisoformat(match_date)
+    except Exception:
+        log.warning("Niepoprawny format daty: %s", match_date)
         return None
 
-    # Zmiana daty na format FlashScore (np. 15.04.2026)
-    flash_date = date_obj.strftime("%d.%m.%Y")
-
-    # Cache
+    # Cache check
     if cache_enabled:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
         cache_file = CACHE_DIR / f"{match_date}.json"
         if cache_file.exists():
             try:
                 import json
-                with open(cache_file) as f:
+                with open(cache_file, "r", encoding="utf-8") as f:
                     cache = json.load(f)
-                    key = f"{_norm_team_name(home_team)}_{_norm_team_name(away_team)}"
+                    key = f"{normalize_team_name(home_team)}_{normalize_team_name(away_team)}"
                     if key in cache:
                         log.debug("Cache hit: %s", key)
                         return cache[key]
-            except Exception:
-                pass
+            except Exception: pass
 
-    # Wyszukiwanie na FlashScore
-    try:
-        result = _search_flashscore(home_team, away_team, flash_date)
-
-        # Zapisz do cache
-        if cache_enabled and result:
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
-            cache_file = CACHE_DIR / f"{match_date}.json"
-            try:
-                import json
-                cache = {}
-                if cache_file.exists():
-                    with open(cache_file) as f:
-                        cache = json.load(f)
-                key = f"{_norm_team_name(home_team)}_{_norm_team_name(away_team)}"
-                cache[key] = result
-                with open(cache_file, "w") as f:
-                    json.dump(cache, f, indent=2)
-            except Exception as e:
-                log.warning("Cache write error: %s", e)
-
-        return result
-    except Exception as e:
-        log.warning("FlashScore scrape error for %s vs %s: %s", home_team, away_team, e)
+    # Oblicz offset dla Flashscore.mobi (?d=X)
+    # d=0 (dzisiaj), d=-1 (wczoraj) itp.
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    diff = (date_obj - today).days
+    
+    # Flashscore.mobi obsługuje zwykle około 7 dni wstecz/przód
+    if abs(diff) > 7:
+        log.info("Data %s jest poza zasięgiem Flashscore.mobi (offset %d).", match_date, diff)
+        # Tu można by dodać fallback na search, ale na razie logujemy błąd
         return None
 
-
-def _search_flashscore(home: str, away: str, date_str: str) -> str | None:
-    """
-    Wewnętrzna funkcja do wyszukiwania wyniku na FlashScore.
-    Zwraca wynik "X-Y" lub None.
-    """
-    # Buduj URL wyszukiwania (przykład: /match/arsenal-chelsea-15042026/)
-    home_slug = _norm_team_name(home)
-    away_slug = _norm_team_name(away)
-    date_slug = date_str.replace(".", "")  # 15.04.2026 → 15042026
-
-    # Spróbuj bezpośrednią ścieżkę
-    urls_to_try = [
-        f"{FLASHSCORE_URL}/match/{home_slug}-{away_slug}-{date_slug}/",
-        f"{FLASHSCORE_URL}/match/{away_slug}-{home_slug}-{date_slug}/",
-        # Alternatywa: search page
-        f"{FLASHSCORE_URL}/search/{home} {away} {date_str}/",
-    ]
-
-    for url in urls_to_try:
-        try:
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            }
-            r = requests.get(url, headers=headers, timeout=10)
-            if r.status_code == 200:
-                result = _parse_flashscore_match(r.text, home, away)
-                if result:
-                    log.info("Found result on FlashScore: %s vs %s → %s", home, away, result)
-                    return result
-        except Exception as e:
-            log.debug("FlashScore URL error %s: %s", url, e)
-            continue
-
-    return None
-
-
-def _parse_flashscore_match(html: str, home: str, away: str) -> str | None:
-    """
-    Parsuje HTML ze strony meczu FlashScore.
-    Szuka wyniku w formacie X-Y.
-    """
-    soup = BeautifulSoup(html, "lxml")
-
-    # Szukaj wyniku w verschiednych miejscach
-    patterns = [
-        # Finalny wynik (główny obszar)
-        r"(\d+)\s*[-–—]\s*(\d+)",
-        # W nagłówku
-        r"<h1[^>]*>.*?(\d+)\s*[-–—]\s*(\d+).*?</h1>",
-    ]
-
-    for pattern in patterns:
-        matches = re.findall(pattern, html)
-        if matches:
-            # Zwróć ostatni znaleziony (zwykle finalny wynik)
-            goals_home, goals_away = matches[-1]
-            return f"{goals_home}-{goals_away}"
-
-    # Spróbuj parsować strukturę JSON osadzoną w HTML (niektóre strony)
+    url = f"{FLASHSCORE_MOBI_URL}/?d={diff}&s=1"
+    print(f"[FlashScore] Pobieram wyniki z: {url}")
+    
     try:
-        import json
-        json_match = re.search(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html)
-        if json_match:
-            data = json.loads(json_match.group(1))
-            if isinstance(data, dict) and "homeTeam" in data and "awayTeam" in data:
-                home_score = data.get("homeTeamScore", {})
-                away_score = data.get("awayTeamScore", {})
-                if isinstance(home_score, (int, str)) and isinstance(away_score, (int, str)):
-                    return f"{home_score}-{away_score}"
-    except Exception:
-        pass
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 13_5 like Mac OS X) AppleWebKit/605.1.15"
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+        r.raise_for_status()
+        
+        # Log fragmentu treści (jak prosił użytkownik)
+        snippet = r.text[:300].replace('\n', ' ')
+        print(f"[FlashScore] Treść (fragment): {snippet}...")
 
+        result = _parse_mobi_html(r.text, home_team, away_team)
+        
+        if result and cache_enabled:
+            # Zapisz do cache
+            try:
+                import json
+                cache_file = CACHE_DIR / f"{match_date}.json"
+                data = {}
+                if cache_file.exists():
+                    with open(cache_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                key = f"{normalize_team_name(home_team)}_{normalize_team_name(away_team)}"
+                data[key] = result
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(data, f, indent=2)
+            except Exception as e:
+                log.warning("Błąd zapisu cache: %s", e)
+
+        return result
+
+    except Exception as e:
+        log.error("Błąd scrapowania FlashScore (%s vs %s): %s", home_team, away_team, e)
+        return None
+
+def _parse_mobi_html(html: str, home: str, away: str) -> str | None:
+    """
+    Parsuje HTML z wersji mobi w poszukiwaniu meczu.
+    Struktura: <span>19:00</span>Home - Away <a ...>2:1</a><br />
+    """
+    # Używamy regex na liniach dla szybkości i prostoty
+    # Najpierw normalizujemy wejściowe nazwy
+    nh = normalize_team_name(home)
+    na = normalize_team_name(away)
+    
+    # Szukamy wzorca: TEAM1 - TEAM2 <a ...>SCORE</a>
+    # Wykorzystujemy fakt, że mobi ma bardzo powtarzalną strukturę
+    lines = html.split("<br />")
+    
+    best_match = None
+    best_score = 0.0
+    
+    for line in lines:
+        if "match/" not in line:
+            continue
+            
+        # Wyciągnij tekst przed linkiem (drużyny) i w linku (wynik)
+        # Przykład: <span>19:00</span>Vasteras SK - Hacken <a href="..." class="fin">3:3</a>
+        m = re.search(r"</span>(.*?)\s*<a[^>]*>(.*?)</a>", line)
+        if m:
+            teams_raw = m.group(1)
+            score = m.group(2).strip()
+            
+            if " - " in teams_raw:
+                t_home_raw, t_away_raw = teams_raw.split(" - ", 1)
+                
+                # Porównaj fuzzy
+                s_h = SequenceMatcher(None, normalize_team_name(t_home_raw), nh).ratio()
+                s_a = SequenceMatcher(None, normalize_team_name(t_away_raw), na).ratio()
+                total_score = (s_h + s_a) / 2
+                
+                if total_score > 0.85:
+                    print(f"  [FlashScore] Potencjalne dopasowanie: {t_home_raw} - {t_away_raw} ({score}) | sim={total_score:.2f}")
+                
+                if total_score > 0.85 and total_score > best_score:
+                    if score != "-:-" and ":" in score:
+                        best_match = score.replace(":", "-")
+                        best_score = total_score
+                        
+    if best_match:
+        log.info("Znaleziono wynik na FlashScore: %s vs %s -> %s (score=%.2f)", home, away, best_match, best_score)
+        return best_match
+        
     return None
-
 
 if __name__ == "__main__":
+    # Test lokalny
+    import sys
     logging.basicConfig(level=logging.INFO)
-
-    # Test
-    result = get_match_result("Arsenal", "Chelsea", "2026-04-15")
-    print(f"Arsenal vs Chelsea (2026-04-15): {result}")
+    
+    # Przykład z zgłoszenia: BK Häcken vs GAIS
+    # (Załóżmy że grali wczoraj)
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    res = get_match_result("BK Häcken", "GAIS", yesterday)
+    print(f"RESULT: {res}")

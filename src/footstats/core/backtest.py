@@ -18,6 +18,9 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from footstats.config import DB_PATH
+from footstats.utils.betting import oblicz_tip_correct  # noqa: E402 (shared utility)
+
 try:
     from tabulate import tabulate
     HAS_TABULATE = True
@@ -32,8 +35,8 @@ except ImportError:
             lines.append("  ".join(str(c).ljust(14) for c in row))
         return "\n".join(lines)
 
-# DB w katalogu data/ na poziomie projektu (F:\bot\data\footstats_backtest.db)
-DB_PATH = Path(__file__).parents[3] / "data" / "footstats_backtest.db"
+# DB w katalogu zdefiniowanym w config.py
+# DB_PATH jest teraz importowane z footstats.config
 
 
 # ── Inicjalizacja ─────────────────────────────────────────────────────────
@@ -67,7 +70,8 @@ def init_db() -> None:
                 kupon_type           TEXT    DEFAULT '',
                 kodeks_rules_checked TEXT    NOT NULL DEFAULT '[]',
                 prompt_version       TEXT    NOT NULL DEFAULT '',
-                factors              TEXT    NOT NULL DEFAULT '[]'
+                factors              TEXT    NOT NULL DEFAULT '[]',
+                match_stats          TEXT
             );
 
             CREATE INDEX IF NOT EXISTS idx_match_date   ON predictions(match_date);
@@ -77,9 +81,9 @@ def init_db() -> None:
         """)
         # Migration: factors column dla istniejących DB
         try:
-            conn.execute("ALTER TABLE predictions ADD COLUMN factors TEXT NOT NULL DEFAULT '[]'")
+            conn.execute("ALTER TABLE predictions ADD COLUMN match_stats TEXT")
         except sqlite3.OperationalError:
-            pass  # kolumna już istnieje
+            pass
 
         # Tabela feedbacku AI (analiza porażek)
         conn.executescript("""
@@ -93,92 +97,6 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_ai_feedback_match ON ai_feedback(match_id);
             CREATE INDEX IF NOT EXISTS idx_ai_feedback_date  ON ai_feedback(created_at);
         """)
-
-
-# ── Logika tip_correct ────────────────────────────────────────────────────
-
-def _oblicz_tip_correct(ai_tip: str, actual_result: str) -> int | None:
-    """
-    Oblicza czy typ był trafiony na podstawie wyniku meczu.
-
-    actual_result może być:
-      - "1", "X", "2"          → bezpośredni wynik
-      - "2-1", "0-0", "3-2"   → wynik bramkowy (parsujemy sami)
-
-    ai_tip obsługiwane:
-      "1", "X", "2", "1X", "X2", "12",
-      "Over 2.5", "Under 2.5", "Over 1.5", "Under 1.5",
-      "Over 3.5", "Under 3.5",
-      "BTTS", "BTTS No",
-      "Over 0.5 HT", "1 HT", "X HT", "2 HT"
-
-    Zwraca 1 (trafiony), 0 (pudło) lub None (nie da się obliczyć).
-    """
-    if not actual_result:
-        return None
-
-    tip  = (ai_tip or "").strip().upper()
-    res  = actual_result.strip()
-
-    # Spróbuj sparsować wynik bramkowy
-    home_g = away_g = None
-    if "-" in res and not res in ("1", "X", "2"):
-        parts = res.replace("–", "-").split("-")
-        try:
-            home_g = int(parts[0].strip())
-            away_g = int(parts[1].strip().split()[0])  # "2-1 (AET)" → 1
-        except (ValueError, IndexError):
-            pass
-
-    # Wyznacz wynik 1/X/2 z bramek
-    if home_g is not None and away_g is not None:
-        if home_g > away_g:
-            match_result = "1"
-        elif home_g == away_g:
-            match_result = "X"
-        else:
-            match_result = "2"
-        total_goals = home_g + away_g
-        btts        = home_g > 0 and away_g > 0
-    elif res in ("1", "X", "2"):
-        match_result = res
-        total_goals  = None
-        btts         = None
-    else:
-        return None  # nie umiemy sparsować
-
-    # Sprawdź typ
-    if tip in ("1", "X", "2"):
-        return 1 if match_result == tip else 0
-
-    if tip == "1X":
-        return 1 if match_result in ("1", "X") else 0
-
-    if tip == "X2":
-        return 1 if match_result in ("X", "2") else 0
-
-    if tip == "12":
-        return 1 if match_result in ("1", "2") else 0
-
-    if tip == "BTTS":
-        return (1 if btts else 0) if btts is not None else None
-
-    if tip == "BTTS NO":
-        return (1 if not btts else 0) if btts is not None else None
-
-    if total_goals is not None:
-        for prefix, op in (("OVER", ">"), ("UNDER", "<")):
-            if tip.startswith(prefix):
-                try:
-                    linia = float(tip.replace(prefix, "").replace("HT", "").strip())
-                    if op == ">":
-                        return 1 if total_goals > linia else 0
-                    else:
-                        return 1 if total_goals < linia else 0
-                except ValueError:
-                    pass
-
-    return None  # nieznany typ
 
 
 # ── 1. save_prediction ────────────────────────────────────────────────────
@@ -222,10 +140,11 @@ def save_prediction(
 
 # ── 2. update_result ─────────────────────────────────────────────────────
 
-def update_result(match_id: int, actual_result: str) -> dict:
+def update_result(match_id: int, actual_result: str, match_stats: dict = None) -> dict:
     """
     Wpisuje wynik po meczu i automatycznie oblicza tip_correct.
     actual_result: np. "2-1", "0-0", "1", "X", "2"
+    match_stats: opcjonalny słownik ze statystykami (xG, strzały itp.)
     """
     init_db()
     with _connect() as conn:
@@ -239,11 +158,11 @@ def update_result(match_id: int, actual_result: str) -> dict:
         if row["actual_result"] is not None:
             print(f"[Backtest] Nadpisuję istniejący wynik (poprzedni: {row['actual_result']})")
 
-        tip_correct = _oblicz_tip_correct(row["ai_tip"], actual_result)
+        tip_correct = oblicz_tip_correct(row["ai_tip"], actual_result)
 
         conn.execute(
-            "UPDATE predictions SET actual_result = ?, tip_correct = ? WHERE id = ?",
-            (actual_result, tip_correct, match_id),
+            "UPDATE predictions SET actual_result = ?, tip_correct = ?, match_stats = ? WHERE id = ?",
+            (actual_result, tip_correct, json.dumps(match_stats or {}, ensure_ascii=False), match_id),
         )
 
     status = {None: "?? (nie obliczono)", 1: "TRAFIONY ✓", 0: "PUDŁO ✗"}
