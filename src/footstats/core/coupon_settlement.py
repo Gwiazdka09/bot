@@ -137,6 +137,15 @@ def settle_active_coupons(
             if not res:
                 res = get_match_result(home, away, mdate, cache_enabled=True)
 
+            # Fallback na predictions table (dla wyników już w DB)
+            if not res:
+                pred_row = conn.execute(
+                    "SELECT actual_result FROM predictions WHERE match_date=? AND (team_home LIKE ? OR team_away LIKE ?) LIMIT 1",
+                    (mdate, f"%{home}%", f"%{away}%")
+                ).fetchone()
+                if pred_row and pred_row["actual_result"]:
+                    res = pred_row["actual_result"]
+
             correct = oblicz_tip_correct(leg["tip"], res)
             leg_results.append(correct)
 
