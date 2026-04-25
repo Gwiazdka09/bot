@@ -9,7 +9,7 @@ from rich.prompt import Prompt, Confirm
 #  STALE
 # ================================================================
 VERSION         = "v3.1 Interaktywny Kreator"
-DB_PATH         = Path("F:/bot/footstats.db")
+DB_PATH         = Path(__file__).parents[2] / "data" / "footstats_backtest.db"
 MAX_GOLE        = 8
 OSTATNIE_N      = 15
 BONUS_DOMOWY    = 1.15
