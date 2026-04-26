@@ -78,7 +78,7 @@ def scrape_flashscore_match_details(match_id: str) -> Dict:
             result["success"] = True
             browser.close()
     except Exception as e:
-        logger.error(f"Error: {{e}")
+        logger.error(f"Error: {e}")
     return result
 
 # Zachowaj search logic z Turn 60

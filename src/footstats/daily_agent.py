@@ -128,23 +128,28 @@ def _wzbogac_forme_top(wyniki: list, top_n: int = 6) -> None:
 
 def _wzbogac_o_betbuilder(wyniki: list) -> None:
     try:
-        from footstats.core.bet_builder import estimate_lambdas_from_probs, get_betbuilder_suggestions
+        from footstats.core.bet_builder import estimate_lambdas_from_probs, get_all_market_suggestions
     except ImportError:
         return
-    
+
     console.print("[dim]BetBuilder: Estymacja macierzy Poissona i generowanie sugestii łączonych...[/dim]")
     for w in wyniki:
         pw = w.get("pw", 0) / 100.0
         pp = w.get("pp", 0) / 100.0
         o25 = w.get("o25", 0) / 100.0
-        
+
         if pw > 0 or pp > 0:
-            # Estymujemy bazowe expected goals (lambda) na bazie probability
             lh, la = estimate_lambdas_from_probs(pw, pp, o25)
             ref_avg = w.get("referee_avg_y")
-            sugestie = get_betbuilder_suggestions(lh, la, ref_avg_yellow=ref_avg)
-            if sugestie:
-                w["bet_builder"] = sugestie
+            markets = get_all_market_suggestions(lh, la, ref_avg_yellow=ref_avg)
+            # Flatten all suggestions for AI context
+            all_sugestie = []
+            for category, items in markets.items():
+                for item in items:
+                    all_sugestie.append(f"[{category}] {item}")
+            if all_sugestie:
+                w["bet_builder"] = all_sugestie
+                w["bet_builder_markets"] = markets
 
 # ── Krok 3: Groq AI ───────────────────────────────────────────────────────────
 

@@ -113,8 +113,92 @@ def get_betbuilder_suggestions(lh: float, la: float, max_goals: int = 7, ref_avg
     if p_x_u35 > 0.25: 
         sugestie.append(f"X & Under 3.5 (Szansa: {int(p_x_u35 * 100)}%)")
 
+    # 6. Handicap -1 (Gospodarz wygrywa różnicą >= 2 goli)
+    p_hc_m1 = sum(mat[h, a] for h in range(max_goals+1) for a in range(max_goals+1) if (h - a) >= 2)
+    # 7. Handicap +1 gość (Gość wygrywa lub remis po dodaniu 1 gola)
+    p_hc_p1_away = sum(mat[h, a] for h in range(max_goals+1) for a in range(max_goals+1) if (a + 1) >= h)
+    # 8. Over 1.5 (>1.5 goli w meczu)
+    p_o15 = sum(mat[h, a] for h in range(max_goals+1) for a in range(max_goals+1) if h + a > 1.5)
+    # 9. Under 2.5
+    p_u25 = sum(mat[h, a] for h in range(max_goals+1) for a in range(max_goals+1) if h + a < 2.5)
+    # 10. Over 3.5
+    p_o35 = sum(mat[h, a] for h in range(max_goals+1) for a in range(max_goals+1) if h + a > 3.5)
+    # 11. Home Over 0.5 (Gospodarz strzeli >= 1)
+    p_home_o05 = sum(mat[h, a] for h in range(1, max_goals+1) for a in range(max_goals+1))
+    # 12. Away Over 0.5 (Gość strzeli >= 1)
+    p_away_o05 = sum(mat[h, a] for h in range(max_goals+1) for a in range(1, max_goals+1))
+    # 13. Home Over 1.5 (Gospodarz strzeli >= 2)
+    p_home_o15 = sum(mat[h, a] for h in range(2, max_goals+1) for a in range(max_goals+1))
+    # 14. 1.połowa Over 0.5 (uproszczona estymacja ~60% of full-time goals in 1H)
+    lh_1h, la_1h = lh * 0.45, la * 0.45
+    mat_1h = probability_matrix(lh_1h, la_1h, max_goals=4)
+    p_1h_o05 = sum(mat_1h[h, a] for h in range(5) for a in range(5) if h + a > 0.5)
+    # 15. 1.połowa BTTS
+    p_1h_btts = sum(mat_1h[h, a] for h in range(1, 5) for a in range(1, 5))
+
+    if p_hc_m1 > 0.30:
+        sugestie.append(f"Handicap -1 Gospodarz (Szansa: {int(p_hc_m1 * 100)}%)")
+    if p_hc_p1_away > 0.60:
+        sugestie.append(f"Handicap +1 Gość (Szansa: {int(p_hc_p1_away * 100)}%)")
+    if p_o15 > 0.80:
+        sugestie.append(f"Over 1.5 (Szansa: {int(p_o15 * 100)}%)")
+    if p_u25 > 0.45:
+        sugestie.append(f"Under 2.5 (Szansa: {int(p_u25 * 100)}%)")
+    if p_o35 > 0.40:
+        sugestie.append(f"Over 3.5 (Szansa: {int(p_o35 * 100)}%)")
+    if p_home_o05 > 0.75:
+        sugestie.append(f"Gospodarz strzeli 0.5+ (Szansa: {int(p_home_o05 * 100)}%)")
+    if p_away_o05 > 0.70:
+        sugestie.append(f"Gość strzeli 0.5+ (Szansa: {int(p_away_o05 * 100)}%)")
+    if p_home_o15 > 0.45:
+        sugestie.append(f"Gospodarz strzeli 1.5+ (Szansa: {int(p_home_o15 * 100)}%)")
+    if p_1h_o05 > 0.70:
+        sugestie.append(f"1.Połowa Over 0.5 (Szansa: {int(p_1h_o05 * 100)}%)")
+    if p_1h_btts > 0.20:
+        sugestie.append(f"1.Połowa BTTS (Szansa: {int(p_1h_btts * 100)}%)")
+
     # Dodaj sugestie kartek jeśli sędzia jest znany
     if ref_avg_yellow:
         sugestie.extend(get_card_suggestions(ref_avg_yellow))
 
     return sugestie
+
+
+def get_corner_suggestions(lh: float, la: float) -> list[str]:
+    """Corner suggestions based on expected goal-scoring activity."""
+    sugestie = []
+    total_lambda = lh + la
+    # Heuristic: ~3.5 corners per expected goal (league average ~10 corners per match)
+    est_corners = total_lambda * 3.5
+    if est_corners > 10.5:
+        sugestie.append(f"Rzuty rożne Over 10.5 (Est: {est_corners:.1f})")
+    if est_corners > 9.5:
+        sugestie.append(f"Rzuty rożne Over 9.5 (Est: {est_corners:.1f})")
+    if est_corners < 8.5:
+        sugestie.append(f"Rzuty rożne Under 9.5 (Est: {est_corners:.1f})")
+    # Dominant attack → more corners for that team
+    if lh > la * 1.5:
+        sugestie.append(f"Gospodarz rożne Over 5.5 (Atak dominujący)")
+    if la > lh * 1.5:
+        sugestie.append(f"Gość rożne Over 5.5 (Atak dominujący)")
+    return sugestie
+
+
+def get_all_market_suggestions(lh: float, la: float, ref_avg_yellow: float | None = None) -> dict[str, list[str]]:
+    """
+    Returns all market suggestions grouped by category.
+    Categories: BetBuilder, Kartki, Rożne, Handicap, Połowy, Gole
+    """
+    bb = get_betbuilder_suggestions(lh, la, ref_avg_yellow=ref_avg_yellow)
+    corners = get_corner_suggestions(lh, la)
+    cards = get_card_suggestions(ref_avg_yellow) if ref_avg_yellow else []
+
+    markets = {}
+    if bb:
+        markets["BetBuilder"] = bb
+    if corners:
+        markets["Rzuty rożne"] = corners
+    if cards:
+        markets["Kartki"] = cards
+
+    return markets

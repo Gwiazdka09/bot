@@ -91,7 +91,7 @@ def szybkie_pewniaczki_2dni(
                 dm = datetime.strptime(d, "%Y-%m-%d")
             except ValueError:
                 continue
-        if not (teraz <= dm <= granica):
+        if not (teraz - timedelta(hours=2) <= dm <= granica):
             continue
 
         pred_ml = ev.get("pred_ml")

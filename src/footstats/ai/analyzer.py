@@ -55,7 +55,7 @@ PEWNOŚĆ (confidence_score 0-100):
 
 JSON SCHEMA (OBOWIĄZKOWY - Zwróć wyłącznie JSON):
 {
-  "typ": "1" | "2" | "X" | "Over 2.5" | "Under 2.5" | "BTTS" | "No BTTS",
+  "typ": "1" | "2" | "X" | "1X" | "X2" | "Over 1.5" | "Over 2.5" | "Over 3.5" | "Under 2.5" | "Under 3.5" | "BTTS" | "No BTTS" | "Handicap -1" | "Handicap +1" | "1 & Over 1.5" | "1 & BTTS" | "BTTS & Over 2.5" | "Kartki Over 3.5" | "Rożne Over 9.5" | "Gosp. 0.5+" | "Gość 0.5+" | "1.Poł Over 0.5",
   "kurs": 1.80,
   "pewnosc_pct": 75,
   "risks_analysis": ["ryzyko 1", "ryzyko 2", "ryzyko 3"],
@@ -1151,7 +1151,7 @@ def ai_analiza_pewniaczki(
     except Exception:
         pass
 
-    mecze_opisy = [_buduj_opis_meczu(w) for w in wyniki[:20]]
+    mecze_opisy = [_buduj_opis_meczu(w) for w in wyniki[:8]]
 
     prompt = f"""ROLA: Jesteś zawodowym, ultra-sceptycznym analitykiem bukmacherskim. Twój cel NIE jest znaleźć zwycięzcę — jest znaleźć powody, dla których typ PRZEGRA.
 
