@@ -73,28 +73,14 @@
 **Code:** `with _connect() as conn:` properly implements __enter__/__exit__
 **Result:** No action needed
 
-### 7. Coupon Dashboard Stats 🔄 IN PROGRESS
-**Need:** Win/loss breakdown by coupon type, ROI % calculation, streak tracking  
-**Endpoint:** Add GET /api/stats/coupon-summary (aggregating last 30 days)
-**Schema:**
-```json
-{
-  "total_coupons": 16,
-  "total_stake": 160,
-  "total_return": 172.32,
-  "roi_percent": 7.7,
-  "win_count": 12,
-  "loss_count": 4,
-  "by_type": {
-    "top3": {"wins": 8, "stake": 80, "return": 92},
-    "combo": {"wins": 3, "stake": 50, "return": 65},
-    "single": {"wins": 1, "stake": 30, "return": 15.32}
-  },
-  "streak": {"current": 3, "max": 5},
-  "confidence_avg": 78.5
-}
-```
-**Implementation:** Query coupons + predictions tables, aggregate by type/date, compute ROI
+### 7. Coupon Dashboard Stats ✅ DONE
+**Commit:** 869c25c (GET /api/stats/coupon-summary endpoint)
+**Completed:**
+- ✅ Endpoint: GET /api/stats/coupon-summary?days=30
+- ✅ Aggregates coupons by type + status (WIN/LOSS/VOID)
+- ✅ Calculates ROI %, average confidence, win streak
+- ✅ Returns: total_coupons, stake, return, by_type breakdown, streak tracking
+- ✅ Live data from DB, configurable lookback window
 
 ---
 
