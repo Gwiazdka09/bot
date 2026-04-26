@@ -1,20 +1,36 @@
-# FootStats v3.1 — Interaktywny Kreator
+# FootStats v3.2 — Ultra-Skeptical AI + Autonomous Scheduler
 
-Narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), 3 źródła danych API oraz AI (Groq llama-3.1-8b-instant) w jedno CLI z live dashboardem i interaktywnym kreatorem kuponów.
+Automatyczne narzędzie do analizy piłkarskiej i predykcji wyników. Łączy model Poissona, ML (Bzzoiro CatBoost), sędziów (zawodtyper.pl), dane API oraz ultra-skeptical AI (Groq llama-3.1-8b) w autonomiczny system z auto-kuponomm, schedulingiem i dashboardem live.
 
-## Funkcje
+## Funkcje v3.2
 
-- **Live Dashboard** – FastAPI + HTML/JS na porcie 8000 (`/preview`) — bankroll, ROI, historia kuponów, ustawienia Kelly
-- **Kreator Kuponu** – 5-krokowy interaktywny wizard: mecze Bzzoiro → analiza AI → wybór typów → Kelly calc → zapis
-- **Kalibracja Kelly v2** – hit-rate z ostatnich 10 kuponów + forma bota (3x seria WIN/LOSE)
-- **Pętla Feedbacku AI** – po każdej porażce Groq generuje wniosek → wstrzykiwany do kolejnego promptu
-- **Zamykanie kuponów** – automatyczne ACTIVE→WIN/LOSE na podstawie API-Football + aktualizacja bankrolla
-- **Predykcja meczów** – model Poissona + ML cross-walidacja z Bzzoiro
-- **Pewniaczki 48h** – skanowanie wszystkich lig Bzzoiro, Scout Bot EV, analiza AI
-- **AI Analiza** – Groq 70B analizuje typy, buduje kupony AKO, ocenia Twój kupon
-- **Form Scraper** – SofaScore (primary) + FlashScore (fallback), forma + kontuzje
-- **Eksport PDF** – raporty z czcionką DejaVu (polskie znaki)
-- **Backtest DB** – SQLite, śledzenie skuteczności typów
+**Autonomiczne Działanie:**
+- **Daily Agent** – Auto-run draft fase (08:00) + final faza (70min przed pierwszym meczem)
+- **Auto Settlement** – KROK 0: aktualizacja wyników, KROK 0b: feedback AI
+- **Scheduler** – Windows Task Scheduler (run_daily.bat) + daily_agent_scheduler.py (draft→final flow)
+
+**AI & Analiza:**
+- **Ultra-Skeptical Analyzer** – Groq szuka powodów do PRZEGRANEJ, nie wygranej. Confidence 0-100, mandatory "ryzyko" field
+- **Pętla Feedbacku AI** – co porażka → Groq wygeneruje lesson → injected do promptu next day
+- **Sędziowie** – zawodtyper.pl stats (avg_yellow, avg_red, n_matches) wpływają na confidence AI
+- **Kalibracja Kelly v2** – hit-rate (70/100/110%) + forma bota (3x seria WIN/LOSE)
+
+**Dashboard & API:**
+- **Live Dashboard** – FastAPI 12 endpoints, porto 8000 (`/preview`)
+- **Statystyki kuponów** – GET `/api/stats/coupon-summary` (ROI %, type breakdown, streak tracking)
+- **Bankroll tracking** – Kelly calc, real-time ROI
+- **Historia kuponów** – status (WIN/LOSS/VOID), stake, payout, AI confidence
+
+**Dane & Predykcje:**
+- **Predykcja meczów** – Poisson + ML cross-validation z Bzzoiro
+- **Pewniaczki 48h** – skanowanie wszystkich lig, Scout Bot EV
+- **Form Scraper** – SofaScore + FlashScore forma/kontuzje
+- **Logging** – centralized logger dla 8 scraperów, observable failures
+
+**Backtest & Tracking:**
+- **30-day backtest** – 100% accuracy (3/3 wins) na 75%+ confidence threshold
+- **SQLite DB** – predictions, coupons, ai_feedback, coupon_settlement
+- **Backtest runner** – walk-forward validation, Poisson calibration
 
 ## Wymagania
 
@@ -67,22 +83,26 @@ Otwórz: `http://localhost:8000` → przekieruje do `/preview`
 
 Zakładki: **Dashboard** (bankroll + ROI) | **Historia** | **Ustawienia** | **Stwórz Kupon**
 
-## Automatyzacja i Tryb "Cichy" (Windows Task Scheduler)
+## Automatyzacja (Windows Task Scheduler)
 
-System posiada dedykowany tryb pracy w tle, który nie przeszkadza w pracy na komputerze (brak wyskakujących okien konsoli).
-
-| Plik | Częstotliwość | Opis |
-|------|------|------|
-| `cichy_bot.bat` | Co 2 godziny | Automatyczna aktualizacja wyników, rozliczanie kuponów i bankrolla (używa `pythonw.exe`) |
-| `scripts/run_dashboard.bat` | Przy starcie | Serwer API na porcie 8000 |
-| `scripts/run_agent.bat` | 08:00 + 16:00 | Główny Daily Agent (analiza + kupon) |
-
-Konfiguracja automatyzacji odbywa się poprzez PowerShell:
-```powershell
-# Rejestracja zadania co 2h w trybie ukrytym
-Register-ScheduledTask -TaskName 'FootStats_Silent_Update' ...
+**Daily Agent (run_daily.bat @08:00):**
+```bash
+python -m footstats.daily_agent_scheduler --stawka 10 --dni 3 --mode draft-wait-final
 ```
-Szczegóły w `docs/scheduler_setup.md`.
+
+**Flow:**
+1. **KROK 0** – Auto-update wyników (48h wstecz)
+2. **KROK 0b** – Analiza porażek AI, generowanie lessons
+3. **KROK 0d** – Fetch sędziów z zawodtyper.pl
+4. **KROK 1** – Bzzoiro ML, analiza forma + sędziego
+5. **Draft Phase** – Groq analiza, kupon A+B, zapis DB
+6. **Wait** – Czekanie na czas z next_final.txt (70min przed pierwszym meczem)
+7. **Final Phase** – Groq dengan lineups + sędziego, finalizacja kuponów
+
+**Files:**
+- `run_daily.bat` – Entry point (scheduled @08:00)
+- `daily_agent_scheduler.py` – Manage draft→final transition
+- `daily_agent.py` – Core 8-step pipeline
 
 ## Uruchomienie
 
