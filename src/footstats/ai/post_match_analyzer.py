@@ -57,16 +57,26 @@ def _pobierz_porazki(days_back: int) -> list[dict]:
 
 
 def _zapisz_feedback(match_id: int, prediction_details: dict, reason: str) -> None:
-    """Zapisuje analizę do tabeli ai_feedback."""
+    """Zapisuje analizę do tabeli ai_feedback. Auto-embeds for RAG semantic search."""
     from footstats.core.backtest import _connect
     with _connect() as conn:
-        conn.execute(
+        cur = conn.execute(
             """
             INSERT INTO ai_feedback (match_id, prediction_details, reason_for_failure)
             VALUES (?, ?, ?)
             """,
             (match_id, json.dumps(prediction_details, ensure_ascii=False), reason),
         )
+        feedback_id = cur.lastrowid
+
+    # Auto-embed for semantic RAG (non-blocking — failure doesn't break feedback write)
+    try:
+        from footstats.ai.rag_embeddings import EmbeddingStore
+        store = EmbeddingStore()
+        store.upsert(feedback_id, reason)
+    except Exception as e:
+        # Log but don't fail — embedding is nice-to-have, not critical
+        logger.debug(f"[RAG] Auto-embed failed for feedback_id={feedback_id}: {e}")
 
 
 def pobierz_ostatnie_wnioski(n: int = 3) -> list[str]:

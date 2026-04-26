@@ -1131,7 +1131,17 @@ def ai_analiza_pewniaczki(
     feedback_str = ""
     try:
         from footstats.ai.post_match_analyzer import pobierz_ostatnie_wnioski
-        wnioski = pobierz_ostatnie_wnioski(3)
+        from footstats.ai.rag import retrieve_relevant_lessons
+
+        # Build query context from coupon: leagues, teams, market types
+        leagues = list(set(w.get("liga", "") for w in wyniki[:10] if w.get("liga")))
+        markets = [w.get("typ_kuponu", "") for w in wyniki[:5] if w.get("typ_kuponu")]
+        query_context = f"Liga: {', '.join(leagues[:3])} | Markety: {', '.join(set(markets))}"
+
+        # Try semantic retrieval first; fall back to chronological
+        lessons_data = retrieve_relevant_lessons(query_context, k=3, min_score=0.3) if query_context.strip() else []
+        wnioski = [lesson["reason_for_failure"] for lesson in lessons_data] if lessons_data else pobierz_ostatnie_wnioski(3)
+
         if wnioski:
             feedback_str = (
                 "WNIOSKI Z OSTATNICH PORAŻEK (Pętla Feedbacku — ucz się błędów):\n"

@@ -165,3 +165,68 @@ def pobierz_rag_kontekst(w: dict) -> str:
         tip = "X"
 
     return pobierz_rag_wzorce(faktory, tip)
+
+
+# ── Semantic RAG: Semantic search over ai_feedback lessons ─────────────────
+
+def retrieve_relevant_lessons(query_context: str, k: int = 5, min_score: float = 0.35) -> list[dict]:
+    """
+    Semantic search over ai_feedback lessons using embeddings.
+    Returns top-k lessons matching query_context by cosine similarity.
+
+    Args:
+        query_context: Description of current coupon/match context
+        k: Number of results (default 5)
+        min_score: Minimum cosine similarity threshold (default 0.35)
+
+    Returns:
+        List of dicts: [{reason_for_failure, match_id, score, created_at}, ...]
+        Empty list if no matches or embeddings table empty.
+    """
+    try:
+        from footstats.ai.rag_embeddings import EmbeddingStore
+        from footstats.core.backtest import _connect
+        import logging
+        import numpy as np
+
+        logger = logging.getLogger(__name__)
+
+        if not query_context or not query_context.strip():
+            return []
+
+        # Embed query
+        store = EmbeddingStore()
+        query_vec = store.embed_text(query_context)
+
+        # Semantic top-k search
+        results = store.cosine_top_k(query_vec, k=k, min_score=min_score)
+        if not results:
+            return []
+
+        # Fetch full records from ai_feedback
+        feedback_ids = [fid for fid, score in results]
+        lessons: list[dict] = []
+
+        with _connect() as conn:
+            for fid, score in results:
+                row = conn.execute(
+                    "SELECT id, match_id, reason_for_failure, created_at FROM ai_feedback WHERE id = ?",
+                    (fid,)
+                ).fetchone()
+                if row:
+                    lessons.append({
+                        'id': row[0],
+                        'match_id': row[1],
+                        'reason_for_failure': row[2],
+                        'score': score,
+                        'created_at': row[3]
+                    })
+
+        logger.debug(f"[RAG] Retrieved {len(lessons)} lessons (top-{k}, min_score={min_score})")
+        return lessons
+
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"[RAG] Semantic retrieval failed: {e}")
+        return []
