@@ -19,14 +19,14 @@
 
 ## 🔴 WYSOKI PRIORYTET — Rozwinięcia poprawy
 
-### 1. Live Coupon Generation Pipeline
-**Status:** Daily_agent pulls Bzzoiro ML candidates, but --faza final never runs automatically.  
-**Problem:** Coupons accumulate in DB without real odds refresh; dashboard shows stale data.  
-**Rozwinięcie:**
-- Implement scheduled daily_agent --faza final (after 08:00 base run)
-- Auto-delete old DRAFT coupons (>24h)
-- Validate coupon odds against live Bzzoiro on 12:00, 18:00 refresh points
-- Add "odds_source" field to coupons table (Bzzoiro ML, API-Football, manual)
+### 1. Live Coupon Generation Pipeline ✅ DONE
+**Status:** Daily_agent auto-executes --faza draft → waits for next_final.txt → --faza final.  
+**Commit:** 2a6a9fa (daily_agent_scheduler.py + run_daily.bat --faza draft)
+**Completed:**
+- ✅ Scheduled daily_agent --faza final (auto-triggered from next_final.txt)
+- ✅ Draft phase runs at 08:00, final phase waits until 70min before first match
+- ✅ Coupons now saved to DB on both draft and final phases
+- ✅ next_final.txt auto-cleaned after final phase execution
 
 ### 2. Playwright Superbet Scraper (BetBuilder)
 **Status:** Planned (project notes), not started.  
@@ -37,13 +37,14 @@
 - Merge with Bzzoiro/API-Football odds in source_manager
 - Test on 3-5 matches daily
 
-### 3. Referee Performance Integration
-**Status:** Stale TODO from Apr 18 (referee_db.py exists but unused).  
-**Problem:** AI doesn't factor referee bias/tendencies into confidence calc.  
-**Rozwinięcie:**
-- Fetch referee data for upcoming matches in KROK 1b (before Groq analysis)
-- Add referee stats (red cards %, fouls %, BTTS %) to AI context
-- Weight confidence by referee pattern match (e.g., strict ref → fewer goals)
+### 3. Referee Performance Integration ✅ DONE
+**Status:** Zawodtyper scraper integrated into daily agent (KROK 0d).  
+**Commit:** db6beab (zawodtyper_referees.py sync + daily_agent integration)
+**Completed:**
+- ✅ Convert zawodtyper_referees.py from async to sync
+- ✅ Add KROK 0d: fetch_referees_zawodtyper() on daily startup
+- ✅ Referee data now updates before AI analysis (integrated in KROK 1b)
+- ✅ Stats used in AI confidence calculation (referee_signal, avg_yellow, n_matches)
 
 ### 4. RAG System (Post-Match Lessons)
 **Status:** Etap 7 (planned), partial Groq integration done (ai_feedback table).  
@@ -58,19 +59,42 @@
 
 ## 🟡 ŚREDNI PRIORYTET — Bug fixes & Polish
 
-### 5. Print → Logging Refactor
-**Files:** All scrapers, daily_agent, evening_agent  
-**Need:** Replace `print()` with `logging.getLogger(__name__).info/debug()`  
-**Why:** Centralize logs, filter by level, enable syslog forwarding to monitoring
+### 5. Print → Logging Refactor ✅ DONE
+**Commit:** e392ffa (logging added to 8 scrapers)
+**Files Completed:** enriched, flashscore_match, form_scraper, kursy, sts, superbet, superoferta, zawodtyper_referees
+**Remaining:** daily_agent, evening_agent (next phase if needed)
+**Completed:**
+- ✅ Added logging import + logger = getLogger(__name__) to 8 scrapers
+- ✅ Replaced print() → logger.info/error/warning with proper f-strings
+- ✅ Centralized observability — can now track scraper failures via logs
 
-### 6. Memory Leak in walkforward.py
-**Location:** `_connect()` function (line ~X)  
-**Issue:** SQLite connections not closed in exception paths  
-**Fix:** Use context managers `with sqlite3.connect() as conn:`
+### 6. Memory Leak in walkforward.py ✅ VERIFIED SAFE
+**Status:** No leak found — _connect() already uses sqlite3.Connection context manager
+**Code:** `with _connect() as conn:` properly implements __enter__/__exit__
+**Result:** No action needed
 
-### 7. Coupon Dashboard Stats
-**Missing:** Win/loss breakdown by coupon type, ROI % calculation, streak tracking  
-**Add:** "/api/stats/coupon-summary" endpoint aggregating last 30 days
+### 7. Coupon Dashboard Stats 🔄 IN PROGRESS
+**Need:** Win/loss breakdown by coupon type, ROI % calculation, streak tracking  
+**Endpoint:** Add GET /api/stats/coupon-summary (aggregating last 30 days)
+**Schema:**
+```json
+{
+  "total_coupons": 16,
+  "total_stake": 160,
+  "total_return": 172.32,
+  "roi_percent": 7.7,
+  "win_count": 12,
+  "loss_count": 4,
+  "by_type": {
+    "top3": {"wins": 8, "stake": 80, "return": 92},
+    "combo": {"wins": 3, "stake": 50, "return": 65},
+    "single": {"wins": 1, "stake": 30, "return": 15.32}
+  },
+  "streak": {"current": 3, "max": 5},
+  "confidence_avg": 78.5
+}
+```
+**Implementation:** Query coupons + predictions tables, aggregate by type/date, compute ROI
 
 ---
 
