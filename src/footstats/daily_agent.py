@@ -587,6 +587,14 @@ def main():
         except Exception as e:
             console.print(f"[dim]Błąd settlement kuponów: {e}[/dim]")
 
+    # Krok 0d: Aktualizacja statystyk sędziów z Zawodtyper (raz dziennie)
+    try:
+        from footstats.scrapers.zawodtyper_referees import fetch_referees_zawodtyper
+        fetch_referees_zawodtyper()
+        console.print("[green]✓ Sędziowie zaktualizowani z Zawodtyper[/green]")
+    except Exception as e:
+        console.print(f"[dim]Referee update: {e}[/dim]")
+
     _sep("KROK 1 — Bzzoiro ML")
     wyniki, indeks = _pobierz_kandydatow(dni=args.dni)
 

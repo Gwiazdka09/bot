@@ -1,9 +1,8 @@
-import asyncio
 from pathlib import Path
 from bs4 import BeautifulSoup
 
 try:
-    from playwright.async_api import async_playwright
+    from playwright.sync_api import sync_playwright
 except ImportError:
     pass
 
@@ -22,18 +21,19 @@ COUNTRY_MAP = {
     "Wochy": "Italy",  # Fallback for encoding issues
 }
 
-async def fetch_referees_zawodtyper() -> None:
+def fetch_referees_zawodtyper() -> None:
+    """Fetch referee stats from zawodtyper.pl using Playwright (sync)."""
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            page = await browser.new_page()
-            
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+
             print(f"[ZawodTyper] Ładuję stronę: {ZAWODTYPER_URL} ...")
-            await page.goto(ZAWODTYPER_URL, timeout=30000)
-            await page.wait_for_timeout(3000) # Czekamy na Vue.js/React hydration
-            
-            content = await page.content()
-            await browser.close()
+            page.goto(ZAWODTYPER_URL, timeout=30000)
+            page.wait_for_timeout(3000) # Czekamy na Vue.js/React hydration
+
+            content = page.content()
+            browser.close()
             
             soup = BeautifulSoup(content, "html.parser")
             tables = soup.find_all("table")
@@ -83,4 +83,4 @@ async def fetch_referees_zawodtyper() -> None:
         print(f"[ZawodTyper] Błąd scrape'owania: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(fetch_referees_zawodtyper())
+    fetch_referees_zawodtyper()
