@@ -545,6 +545,130 @@ def place_coupon(req: PlaceCouponRequest):
     }
 
 
+@app.get("/api/stats/coupon-summary")
+def get_coupon_summary(days: int = 30):
+    """
+    Zwraca statystyki kuponów za ostatnie N dni.
+
+    Zwraca:
+        {
+            "total_coupons": int,
+            "total_stake": float,
+            "total_return": float,
+            "roi_percent": float,
+            "win_count": int,
+            "loss_count": int,
+            "void_count": int,
+            "by_type": {type: {wins, stake, return}},
+            "streak": {current, max},
+            "confidence_avg": float
+        }
+    """
+    try:
+        from datetime import datetime, timedelta
+        from footstats.config import DB_PATH
+        import sqlite3
+
+        db = sqlite3.connect(DB_PATH)
+        db.row_factory = sqlite3.Row
+        c = db.cursor()
+
+        cutoff = (datetime.now() - timedelta(days=days)).strftime("%Y-%m-%d")
+
+        # Query coupons created in last N days
+        c.execute("""
+            SELECT
+                COUNT(*) as cnt,
+                SUM(stake_pln) as total_stake,
+                SUM(payout_pln) as total_return,
+                kupon_type,
+                status
+            FROM coupons
+            WHERE created_at >= ?
+            GROUP BY kupon_type, status
+        """, (cutoff,))
+
+        rows = c.fetchall()
+        stats = {
+            "total_coupons": 0,
+            "total_stake": 0.0,
+            "total_return": 0.0,
+            "roi_percent": 0.0,
+            "win_count": 0,
+            "loss_count": 0,
+            "void_count": 0,
+            "by_type": {},
+        }
+
+        for row in rows:
+            cnt = row["cnt"]
+            stake = row["total_stake"] or 0.0
+            ret = row["total_return"] or 0.0
+            typ = row["kupon_type"] or "unknown"
+            status = row["status"] or "unknown"
+
+            stats["total_coupons"] += cnt
+            stats["total_stake"] += stake
+
+            if status == "WIN":
+                stats["win_count"] += cnt
+                stats["total_return"] += ret
+            elif status == "LOSS":
+                stats["loss_count"] += cnt
+            elif status == "VOID":
+                stats["void_count"] += cnt
+
+            if typ not in stats["by_type"]:
+                stats["by_type"][typ] = {"wins": 0, "stake": 0.0, "return": 0.0}
+
+            if status == "WIN":
+                stats["by_type"][typ]["wins"] += cnt
+                stats["by_type"][typ]["return"] += ret
+            stats["by_type"][typ]["stake"] += stake
+
+        if stats["total_stake"] > 0:
+            stats["roi_percent"] = round(
+                ((stats["total_return"] - stats["total_stake"]) / stats["total_stake"]) * 100, 1
+            )
+
+        # Query average confidence from predictions
+        c.execute("""
+            SELECT AVG(ai_confidence) as avg_conf
+            FROM predictions
+            WHERE created_at >= ?
+        """, (cutoff,))
+        conf_row = c.fetchone()
+        stats["confidence_avg"] = round(conf_row["avg_conf"] or 0.0, 1)
+
+        # Streak calculation
+        c.execute("""
+            SELECT status
+            FROM coupons
+            WHERE created_at >= ?
+            ORDER BY created_at DESC
+            LIMIT 20
+        """, (cutoff,))
+        streak_rows = c.fetchall()
+        current_streak = 0
+        max_streak = 0
+        for sr in streak_rows:
+            if sr["status"] == "WIN":
+                current_streak += 1
+                max_streak = max(max_streak, current_streak)
+            else:
+                current_streak = 0
+
+        stats["streak"] = {"current": current_streak, "max": max_streak}
+
+        db.close()
+        return stats
+
+    except Exception as e:
+        import logging
+        logging.error("Błąd GET /api/stats/coupon-summary: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/coupons/settle")
 def settle_coupons(req: SettleRequest):
     """
