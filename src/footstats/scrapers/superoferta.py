@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 superoferta.py – Scraper SuperOferta (boosted odds) z STS
 ==========================================================
@@ -27,7 +31,7 @@ from datetime import datetime
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 except ImportError:
-    print("BŁĄD: pip install playwright  następnie  python -m playwright install chromium")
+    logger.info("BŁĄD: pip install playwright  następnie  python -m playwright install chromium")
     sys.exit(1)
 
 from dotenv import load_dotenv
@@ -84,10 +88,10 @@ def _zaloguj(page) -> bool:
         time.sleep(0.3)
         page.click("button:has-text('Zaloguj się')", timeout=5000)
         time.sleep(3)
-        print("[STS] Zalogowano")
+        logger.info("[STS] Zalogowano")
         return True
     except Exception as e:
-        print(f"[STS] Logowanie nieudane: {e}")
+        logger.info(f"[STS] Logowanie nieudane: {e}")
         return False
 
 
@@ -149,9 +153,9 @@ def _parsuj_superoferta_1x2(btn, debug: bool = False) -> dict | None:
         liga   = lines9[0] if lines9 else "?"
 
         if debug:
-            print(f"  DBG t5: {lines5[:8]}")
-            print(f"  DBG t8: {lines8[:6]}")
-            print(f"  DBG liga: {liga}")
+            logger.info(f"  DBG t5: {lines5[:8]}")
+            logger.info(f"  DBG t8: {lines8[:6]}")
+            logger.info(f"  DBG liga: {liga}")
 
         return {
             "mecz":    f"{team1} - {team2}",
@@ -168,7 +172,7 @@ def _parsuj_superoferta_1x2(btn, debug: bool = False) -> dict | None:
         }
     except Exception as e:
         if debug:
-            print(f"  DBG ERR 1x2: {e}")
+            logger.info(f"  DBG ERR 1x2: {e}")
         return None
 
 
@@ -241,7 +245,7 @@ def pobierz_superoferty(debug: bool = False) -> list:
         page = ctx.new_page()
 
         try:
-            print("[SuperOferta] Otwieram STS /wyzsze-kursy...")
+            logger.info("[SuperOferta] Otwieram STS /wyzsze-kursy...")
             page.goto(
                 f"{STS_URL}/zaklady-bukmacherskie/wyzsze-kursy",
                 wait_until="domcontentloaded",
@@ -265,7 +269,7 @@ def pobierz_superoferty(debug: bool = False) -> list:
             boost_btns = page.query_selector_all(
                 '[class*="odds-button__container"]:has([class*="boost-icon"])'
             )
-            print(f"[SuperOferta] Boost buttons: {len(boost_btns)}")
+            logger.info(f"[SuperOferta] Boost buttons: {len(boost_btns)}")
 
             seen_mecze: set[str] = set()
             for btn in boost_btns:
@@ -280,7 +284,7 @@ def pobierz_superoferty(debug: bool = False) -> list:
             daily_tiles = page.query_selector_all(
                 '[class*="one-ticket-match-tile"][class*="daily-boost"]'
             )
-            print(f"[SuperOferta] Daily Boost tiles: {len(daily_tiles)}")
+            logger.info(f"[SuperOferta] Daily Boost tiles: {len(daily_tiles)}")
 
             for tile in daily_tiles:
                 wynik = _parsuj_daily_boost(tile)
@@ -291,13 +295,13 @@ def pobierz_superoferty(debug: bool = False) -> list:
                         wyniki.append(wynik)
 
         except Exception as e:
-            print(f"[SuperOferta] Błąd: {e}")
+            logger.info(f"[SuperOferta] Błąd: {e}")
             if debug:
                 page.screenshot(path="superoferta_error.png")
         finally:
             browser.close()
 
-    print(f"[SuperOferta] Znaleziono {len(wyniki)} SuperOfert")
+    logger.info(f"[SuperOferta] Znaleziono {len(wyniki)} SuperOfert")
     return wyniki
 
 
@@ -313,12 +317,12 @@ def dodaj_ev_bzzoiro(oferty: list) -> list:
         klient = BzzoiroClient(bzz_key)
         ok, msg = klient.waliduj()
         if not ok:
-            print(f"[EV] Bzzoiro: {msg}")
+            logger.info(f"[EV] Bzzoiro: {msg}")
             return oferty
         mecze_bzz = klient.predykcje_tygodnia()
-        print(f"[EV] Bzzoiro: {len(mecze_bzz)} meczów")
+        logger.info(f"[EV] Bzzoiro: {len(mecze_bzz)} meczów")
     except Exception as e:
-        print(f"[EV] Błąd Bzzoiro: {e}")
+        logger.info(f"[EV] Błąd Bzzoiro: {e}")
         return oferty
 
     def _match_score(oferta_mecz: str, bzz_gosp: str, bzz_gosc: str) -> int:
@@ -406,26 +410,26 @@ def main():
     brak_ev = "--brak-ev" in sys.argv
 
     print("=" * 60)
-    print("  SUPEROFERTA STS — BOOSTED KURSY")
+    logger.info("  SUPEROFERTA STS — BOOSTED KURSY")
     print("=" * 60)
 
     oferty = pobierz_superoferty(debug=debug)
 
     if not oferty:
-        print("\n[!] Brak SuperOfert dziś. Sprawdź --debug po zrzut ekranu.")
+        logger.info("\n[!] Brak SuperOfert dziś. Sprawdź --debug po zrzut ekranu.")
         sys.exit(0)
 
     if not brak_ev:
-        print("\n[EV] Porównuję z Bzzoiro...")
+        logger.info("\n[EV] Porównuję z Bzzoiro...")
         oferty = dodaj_ev_bzzoiro(oferty)
 
     plik = zapisz(oferty)
-    print(f"\n[OK] Zapisano: {plik}")
+    logger.info(f"\n[OK] Zapisano: {plik}")
 
     # ── Wyświetlenie ────────────────────────────────────────────────────
     print()
     print("=" * 60)
-    print("  ZNALEZIONE SUPEROFERTY")
+    logger.info("  ZNALEZIONE SUPEROFERTY")
     print("=" * 60)
 
     for i, o in enumerate(oferty, 1):
@@ -435,13 +439,13 @@ def main():
         czas   = o.get("czas", "")
         typ    = o.get("typ", "")
 
-        print(f"\n{i}. [{rodzaj.upper()}] {mecz}")
+        logger.info(f"\n{i}. [{rodzaj.upper()}] {mecz}")
         if liga:
-            print(f"   Liga:  {liga}")
+            logger.info(f"   Liga:  {liga}")
         if czas:
-            print(f"   Czas:  {czas}")
+            logger.info(f"   Czas:  {czas}")
         if typ and typ != "Mecz - SuperOferta":
-            print(f"   Typ:   {typ}")
+            logger.info(f"   Typ:   {typ}")
 
         if rodzaj == "superoferta_1x2":
             k1 = o.get("k1")
@@ -464,7 +468,7 @@ def main():
             ]:
                 if isinstance(ev_val, float) and ev_val >= 10:
                     ocena = o.get(f"ev_{ev_label}_ocena", "")
-                    print(f"   >>> TYP {ev_label} @ {kurs}  EV={ev_val:+.1f}%  [{ocena}]")
+                    logger.info(f"   >>> TYP {ev_label} @ {kurs}  EV={ev_val:+.1f}%  [{ocena}]")
 
         else:  # daily_boost
             kurs = o.get("kurs_boost")
@@ -476,11 +480,11 @@ def main():
             print()
 
         if o.get("bzz_mecz"):
-            print(f"   Bzz:  {o['bzz_mecz']}")
+            logger.info(f"   Bzz:  {o['bzz_mecz']}")
 
     print()
     print("=" * 60)
-    print(f"Razem: {len(oferty)} SuperOfert")
+    logger.info(f"Razem: {len(oferty)} SuperOfert")
     print("=" * 60)
 
 

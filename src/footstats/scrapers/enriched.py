@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 enriched.py – Wzbogacanie danych przed analizą meczową
 =======================================================
@@ -309,7 +313,7 @@ def enrich_match_data(team_home: str, team_away: str, match_date: str = None) ->
     Zwraca dict z kluczami: meta, home_injuries, away_injuries,
     home_press, away_press, home_xg, away_xg, murawa.
     """
-    print(f"[Enriched] {team_home} vs {team_away} ({match_date or 'brak daty'})")
+    logger.info(f"[Enriched] {team_home} vs {team_away} ({match_date or 'brak daty'})")
 
     wynik: dict = {
         "meta":          {"home": team_home, "away": team_away,
@@ -334,11 +338,11 @@ def enrich_match_data(team_home: str, team_away: str, match_date: str = None) ->
     ]:
         try:
             wynik[key] = fn(team)
-            print(f"[Enriched] {key}: {'OK' if wynik[key] else 'brak'}")
+            logger.info(f"[Enriched] {key}: {'OK' if wynik[key] else 'brak'}")
         except Exception as e:
-            print(f"[Enriched] {key}: błąd – {e}")
+            logger.info(f"[Enriched] {key}: błąd – {e}")
 
-    print("[Enriched] Gotowe.")
+    logger.info("[Enriched] Gotowe.")
     return wynik
 
 
@@ -353,26 +357,26 @@ if __name__ == "__main__":
     dane = enrich_match_data(home, away, date)
 
     print("\n" + "=" * 60)
-    print(f"WZBOGACONE DANE: {home} vs {away}")
+    logger.info(f"WZBOGACONE DANE: {home} vs {away}")
     print("=" * 60)
 
     inj_h = dane["home_injuries"]
     inj_a = dane["away_injuries"]
     for inj, name in [(inj_h, home), (inj_a, away)]:
         if inj:
-            print(f"\n[{name}] Skład: {inj['squad_size']} | Kontuzje: {len(inj['injured'])} | Zawieszenia: {len(inj['suspended'])}")
-            for g in inj["injured"]:   print(f"  - KONTUZJA: {g['name']} ({g['position']})")
-            for g in inj["suspended"]: print(f"  - ZAWIESZ:  {g['name']} ({g['position']})")
+            logger.info(f"\n[{name}] Skład: {inj['squad_size']} | Kontuzje: {len(inj['injured'])} | Zawieszenia: {len(inj['suspended'])}")
+            for g in inj["injured"]:   logger.info(f"  - KONTUZJA: {g['name']} ({g['position']})")
+            for g in inj["suspended"]: logger.info(f"  - ZAWIESZ:  {g['name']} ({g['position']})")
 
     for press, name in [(dane["home_press"], home), (dane["away_press"], away)]:
         if press:
-            print(f"\n[Press {name}] {press['title']}")
-            print(f"  {press['snippet'][:200]}...")
+            logger.info(f"\n[Press {name}] {press['title']}")
+            logger.info(f"  {press['snippet'][:200]}...")
 
     for xg, name in [(dane["home_xg"], home), (dane["away_xg"], away)]:
         if xg:
-            print(f"\n[xG {name}] {xg['mecze']} meczów | strzelone avg: {xg['xg_scored_avg']} | stracone avg: {xg['xg_conc_avg']}")
+            logger.info(f"\n[xG {name}] {xg['mecze']} meczów | strzelone avg: {xg['xg_scored_avg']} | stracone avg: {xg['xg_conc_avg']}")
 
     murawa = dane["murawa"]
-    if murawa["home_artificial"]: print(f"\n[Murawa] {home}: SZTUCZNA")
-    if murawa["away_artificial"]: print(f"[Murawa] {away}: SZTUCZNA")
+    if murawa["home_artificial"]: logger.info(f"\n[Murawa] {home}: SZTUCZNA")
+    if murawa["away_artificial"]: logger.info(f"[Murawa] {away}: SZTUCZNA")

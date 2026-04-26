@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 superbet.py – Scraper kuponów z Superbet SuperSocial
 =====================================================
@@ -26,7 +30,7 @@ from pathlib import Path
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 except ImportError:
-    print("BLAD: pip install playwright  nastepnie  python -m playwright install chromium")
+    logger.error("BLAD: pip install playwright  nastepnie  python -m playwright install chromium")
     sys.exit(1)
 
 from dotenv import load_dotenv
@@ -73,12 +77,12 @@ def _akceptuj_cookies(page) -> None:
         try:
             page.wait_for_selector(sel, timeout=5000)
             page.click(sel)
-            print("[Superbet] Zaakceptowano cookies")
+            logger.info("[Superbet] Zaakceptowano cookies")
             time.sleep(1)
             return
         except Exception:
             pass
-    print("[Superbet] Baner cookie nie pojawil sie lub juz zaakceptowany")
+    logger.info("[Superbet] Baner cookie nie pojawil sie lub juz zaakceptowany")
 
 
 def _zapisz_cache(dane: list, nazwa: str = "kupony") -> Path:
@@ -96,7 +100,7 @@ def zaloguj(page) -> bool:
     haslo = os.getenv("SUPERBET_PASSWORD", "").strip()
 
     if not login or not haslo:
-        print("[Superbet] Brak SUPERBET_LOGIN lub SUPERBET_PASSWORD w .env")
+        logger.info("[Superbet] Brak SUPERBET_LOGIN lub SUPERBET_PASSWORD w .env")
         return False
 
     # Selektory pola email/login — Superbet: name='username', type='text', pusty placeholder
@@ -121,7 +125,7 @@ def zaloguj(page) -> bool:
 
     try:
         # Krok 1: otwórz stronę główną i kliknij Zaloguj (modal)
-        print("[Superbet] Klikam przycisk Zaloguj na stronie glownej...")
+        logger.info("[Superbet] Klikam przycisk Zaloguj na stronie glownej...")
         page.goto(SUPERBET_URL, wait_until="domcontentloaded", timeout=20000)
         time.sleep(2)
         _akceptuj_cookies(page)
@@ -137,19 +141,19 @@ def zaloguj(page) -> bool:
             try:
                 page.wait_for_selector(sel, timeout=5000)
                 page.click(sel)
-                print(f"[Superbet] Kliknieto przycisk logowania ({sel})")
+                logger.info(f"[Superbet] Kliknieto przycisk logowania ({sel})")
                 time.sleep(3)
                 break
             except Exception:
                 continue
 
         # Krok 2: poczekaj na formularz logowania
-        print("[Superbet] Czekam na formularz logowania...")
+        logger.info("[Superbet] Czekam na formularz logowania...")
         try:
             page.wait_for_selector(FORM_WAIT_SEL, timeout=10000)
-            print("[Superbet] Formularz znaleziony")
+            logger.info("[Superbet] Formularz znaleziony")
         except PWTimeout:
-            print("[Superbet] Formularz nie pojawil sie — sprawdz screenshot")
+            logger.info("[Superbet] Formularz nie pojawil sie — sprawdz screenshot")
             page.screenshot(path="superbet_debug_noform.png")
             return False
 
@@ -158,7 +162,7 @@ def zaloguj(page) -> bool:
         for sel in EMAIL_SELS:
             try:
                 page.fill(sel, login, timeout=3000)
-                print(f"[Superbet] Login wpisany ({sel})")
+                logger.info(f"[Superbet] Login wpisany ({sel})")
                 email_wpisany = True
                 time.sleep(0.4)
                 break
@@ -173,7 +177,7 @@ def zaloguj(page) -> bool:
                     id: i.id, visible: i.offsetParent !== null
                 }))
             """)
-            print(f"[Superbet] BLAD: nie znaleziono pola loginu. Inputy: {inputs_info}")
+            logger.error(f"[Superbet] BLAD: nie znaleziono pola loginu. Inputy: {inputs_info}")
             page.screenshot(path="superbet_debug_noform.png")
             return False
 
@@ -181,14 +185,14 @@ def zaloguj(page) -> bool:
         for sel in ["input[type='password']", "input[name='password']", "input[id*='password']"]:
             try:
                 page.fill(sel, haslo, timeout=3000)
-                print("[Superbet] Haslo wpisane")
+                logger.info("[Superbet] Haslo wpisane")
                 time.sleep(0.4)
                 break
             except Exception:
                 continue
 
         page.screenshot(path="superbet_debug_filled.png")
-        print("[Superbet] Screenshot po wpisaniu: superbet_debug_filled.png")
+        logger.info("[Superbet] Screenshot po wpisaniu: superbet_debug_filled.png")
 
         # Krok 5: zatwierdź
         for sel in [
@@ -202,7 +206,7 @@ def zaloguj(page) -> bool:
                 el = page.query_selector(sel)
                 if el and el.is_visible():
                     el.click()
-                    print(f"[Superbet] Submit klikniety ({sel})")
+                    logger.info(f"[Superbet] Submit klikniety ({sel})")
                     time.sleep(5)
                     break
             except Exception:
@@ -222,18 +226,18 @@ def zaloguj(page) -> bool:
             try:
                 page.wait_for_selector(sel, timeout=6000)
                 zalogowany = True
-                print(f"[Superbet] Zalogowano pomyslnie (wykryto: {sel})")
+                logger.info(f"[Superbet] Zalogowano pomyslnie (wykryto: {sel})")
                 break
             except PWTimeout:
                 continue
 
         if not zalogowany:
-            print("[Superbet] Nie potwierdzono logowania — sprawdz screenshot")
+            logger.info("[Superbet] Nie potwierdzono logowania — sprawdz screenshot")
             page.screenshot(path="superbet_debug_login_fail.png")
         return True  # kontynuuj nawet jeśli nie pewne
 
     except Exception as e:
-        print(f"[Superbet] Blad logowania: {e}")
+        logger.error(f"[Superbet] Blad logowania: {e}")
         return False
 
 
@@ -287,20 +291,20 @@ def pobierz_kupony_api(page, max_kupony: int = 50) -> list:
             page.goto(url, wait_until="domcontentloaded", timeout=25000)
             time.sleep(4)
             _zamknij_popup(page)
-            print(f"[API] Zaladowano: {page.url}")
+            logger.info(f"[API] Zaladowano: {page.url}")
 
             # Scroll żeby wyzwolić lazy-loading
             for _ in range(5):
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 time.sleep(1.0)
 
-            print(f"[API] Zebrano {len(api_dane)} odpowiedzi JSON z {url}")
+            logger.info(f"[API] Zebrano {len(api_dane)} odpowiedzi JSON z {url}")
             for r in api_dane:
-                print(f"  [API URL] {r['url'][:120]}")
+                logger.info(f"  [API URL] {r['url'][:120]}")
 
             # Zbuduj mapę ticketId → nick z DOM-u (przed parsowaniem API)
             nick_map = _wyciagnij_nicki_z_dom(page)
-            print(f"[API] Nick map z DOM-u: {len(nick_map)} wpisow")
+            logger.info(f"[API] Nick map z DOM-u: {len(nick_map)} wpisow")
 
             # Parsuj ticket responses
             kupony_znalezione = []
@@ -319,17 +323,17 @@ def pobierz_kupony_api(page, max_kupony: int = 50) -> list:
                         json.dumps(resp['data'], ensure_ascii=False, indent=2),
                         encoding='utf-8'
                     )
-                    print(f"  [API] Probka ticketu: {debug_t.name}")
+                    logger.info(f"  [API] Probka ticketu: {debug_t.name}")
                     debug_saved = True
                 kupony_znalezione.extend(wyniki_r)
 
             if kupony_znalezione:
                 n = len(kupony_znalezione)
-                print(f"[API] Sparsowano {n} kuponow z {url}")
+                logger.info(f"[API] Sparsowano {n} kuponow z {url}")
                 return kupony_znalezione[:max_kupony]
 
         except Exception as e:
-            print(f"[API] Blad dla {url}: {e}")
+            logger.error(f"[API] Blad dla {url}: {e}")
 
     # Nic nie znaleziono — zapisz dump do diagnozy
     if api_dane:
@@ -342,7 +346,7 @@ def pobierz_kupony_api(page, max_kupony: int = 50) -> list:
                        ensure_ascii=False, indent=2),
             encoding='utf-8'
         )
-        print(f"[API] Dump struktury API → {dump_path}")
+        logger.info(f"[API] Dump struktury API → {dump_path}")
 
     return []
 
@@ -561,7 +565,7 @@ def _wyciagnij_nicki_z_dom(page) -> dict:
         """)
         return wynik or {}
     except Exception as e:
-        print(f"[DOM] Blad ekstrakcji nicków: {e}")
+        logger.error(f"[DOM] Blad ekstrakcji nicków: {e}")
         return {}
 
 
@@ -584,11 +588,11 @@ def pobierz_typerzy(page, max_typerzy: int = 30) -> list:
 
     for social_url in kandydaci_url:
         try:
-            print(f"[Superbet] Próbuję: {social_url}")
+            logger.info(f"[Superbet] Próbuję: {social_url}")
             page.goto(social_url, wait_until="domcontentloaded", timeout=25000)
             time.sleep(3)
             _zamknij_popup(page)
-            print(f"[Superbet] Faktyczny URL: {page.url}")
+            logger.info(f"[Superbet] Faktyczny URL: {page.url}")
 
             # Screenshot przed scrollem
             slug = social_url.split('/')[-1] or 'social'
@@ -624,7 +628,7 @@ def pobierz_typerzy(page, max_typerzy: int = 30) -> list:
             print(f"[Superbet] Linki ogólem: {len(wszystkie_linki)}, "
                   f"social/user: {len(social_linki)}")
             if social_linki:
-                print(f"[Superbet] Social linki: {social_linki[:15]}")
+                logger.info(f"[Superbet] Social linki: {social_linki[:15]}")
 
             # Wzorce URL profilu — testuj kolejno
             linki = []
@@ -637,15 +641,15 @@ def pobierz_typerzy(page, max_typerzy: int = 30) -> list:
             ]:
                 linki = page.query_selector_all(wzorzec)
                 if linki:
-                    print(f"[Superbet] Wzorzec '{wzorzec}': {len(linki)} linków")
+                    logger.info(f"[Superbet] Wzorzec '{wzorzec}': {len(linki)} linków")
                     break
 
             if not linki:
-                print(f"[Superbet] Brak linków profili na {social_url}")
+                logger.info(f"[Superbet] Brak linków profili na {social_url}")
                 continue  # spróbuj kolejny URL
 
         except Exception as e:
-            print(f"[Superbet] Blad dla {social_url}: {e}")
+            logger.error(f"[Superbet] Blad dla {social_url}: {e}")
             continue
 
         # Zbierz typerów z linków
@@ -692,7 +696,7 @@ def pobierz_typerzy(page, max_typerzy: int = 30) -> list:
             seen_nicks.add(t["nick"])
             typerzy_uniq.append(t)
 
-    print(f"[Superbet] Unikalni typerzy (DOM): {len(typerzy_uniq)}")
+    logger.info(f"[Superbet] Unikalni typerzy (DOM): {len(typerzy_uniq)}")
     return typerzy_uniq
 
 
@@ -748,7 +752,7 @@ def pobierz_kupony_typera(page, typer: dict) -> list:
                 "div:has([class*='odds']):has([class*='event'])"
             )
 
-        print(f"  [{nick}] Znaleziono {len(kupon_els)} kuponów")
+        logger.info(f"  [{nick}] Znaleziono {len(kupon_els)} kuponów")
 
         for el in kupon_els:
             try:
@@ -765,7 +769,7 @@ def pobierz_kupony_typera(page, typer: dict) -> list:
                 kupony.append(kupon)
 
     except Exception as e:
-        print(f"  [{nick}] Blad: {e}")
+        logger.error(f"  [{nick}] Blad: {e}")
 
     return kupony
 
@@ -968,7 +972,7 @@ def analizuj_kupony_ai(kupony: list) -> list:
         try:
             from footstats.ai.client import zapytaj_ai as _zapytaj_typera
         except ImportError:
-            print("[AI] Brak modulu AI — pomijam")
+            logger.info("[AI] Brak modulu AI — pomijam")
             return kupony
 
     wyniki = []
@@ -1018,7 +1022,7 @@ ZADANIE: Oceń kupon i odpowiedz TYLKO w JSON:
 
         wynik["_oryginal"] = kupon
         wyniki.append(wynik)
-        print(f"  [AI] {nick}: {wynik.get('ocena_ogolna','?')} — {wynik.get('komentarz','')[:80]}")
+        logger.info(f"  [AI] {nick}: {wynik.get('ocena_ogolna','?')} — {wynik.get('komentarz','')[:80]}")
 
     return wyniki
 
@@ -1036,13 +1040,13 @@ def main():
             except ValueError:
                 pass
 
-    print(f"[Superbet] SuperSocial Scraper — top {max_top} typerów")
-    print(f"[Superbet] AI: {'wylaczone' if brak_ai else 'wlaczone (Groq)'}")
+    logger.info(f"[Superbet] SuperSocial Scraper — top {max_top} typerów")
+    logger.info(f"[Superbet] AI: {'wylaczone' if brak_ai else 'wlaczone (Groq)'}")
     print()
 
     login = os.getenv("SUPERBET_LOGIN", "")
     if not login:
-        print("BLAD: Dodaj SUPERBET_LOGIN i SUPERBET_PASSWORD do .env")
+        logger.error("BLAD: Dodaj SUPERBET_LOGIN i SUPERBET_PASSWORD do .env")
         sys.exit(1)
 
     wszystkie_kupony: list[dict] = []
@@ -1062,7 +1066,7 @@ def main():
         try:
             # ── Krok 1: zaloguj ──────────────────────────────────────────────
             if not zaloguj(page):
-                print("[Superbet] Automatyczne logowanie nie powiodlo sie")
+                logger.info("[Superbet] Automatyczne logowanie nie powiodlo sie")
                 if debug:
                     input("Zaloguj sie recznie i nacisnij Enter...")
                 else:
@@ -1076,46 +1080,46 @@ def main():
                 page.screenshot(path="superbet_debug_login.png")
 
             # ── Krok 2a: próba przechwycenia API ─────────────────────────────
-            print("[Superbet] Próba przechwycenia API SuperSocial...")
+            logger.info("[Superbet] Próba przechwycenia API SuperSocial...")
             wszystkie_kupony = pobierz_kupony_api(page, max_kupony=max_top * 3)
 
             if wszystkie_kupony:
-                print(f"[Superbet] API: zebrano {len(wszystkie_kupony)} kuponów — pomijam DOM scraping")
+                logger.info(f"[Superbet] API: zebrano {len(wszystkie_kupony)} kuponów — pomijam DOM scraping")
             else:
                 # ── Krok 2b: fallback — DOM scraping przez profile ────────────
-                print("[Superbet] API nie zwrócilo danych — próba DOM scrapingu...")
+                logger.info("[Superbet] API nie zwrócilo danych — próba DOM scrapingu...")
                 typerzy = pobierz_typerzy(page, max_typerzy=max_top)
 
                 if not typerzy:
-                    print("[Superbet] Brak typerów — sprawdz superbet_debug_*.png")
+                    logger.info("[Superbet] Brak typerów — sprawdz superbet_debug_*.png")
                     browser.close()
                     sys.exit(1)
 
                 # ── Krok 3: scrapuj kupony każdego typera ────────────────────
                 for idx, typer in enumerate(typerzy, 1):
                     nick = typer["nick"]
-                    print(f"\n[{idx}/{len(typerzy)}] {nick}")
+                    logger.info(f"\n[{idx}/{len(typerzy)}] {nick}")
 
                     kupony = pobierz_kupony_typera(page, typer)
                     wszystkie_kupony.extend(kupony)
-                    print(f"  Zebrano {len(kupony)} kuponów")
+                    logger.info(f"  Zebrano {len(kupony)} kuponów")
 
         except Exception as e:
-            print(f"[Superbet] Blad glowny: {e}")
+            logger.error(f"[Superbet] Blad glowny: {e}")
             if debug:
                 page.screenshot(path="superbet_error.png")
         finally:
             browser.close()
 
     # ── Krok 4: zapisz i analizuj ─────────────────────────────────────────
-    print(f"\n[Superbet] Zebrano {len(wszystkie_kupony)} kuponów lacznie")
+    logger.info(f"\n[Superbet] Zebrano {len(wszystkie_kupony)} kuponów lacznie")
 
     if not wszystkie_kupony:
-        print("[Superbet] Brak kuponów — uruchom z --debug zeby zobaczyc co sie dzieje")
+        logger.info("[Superbet] Brak kuponów — uruchom z --debug zeby zobaczyc co sie dzieje")
         sys.exit(1)
 
     plik_raw = _zapisz_cache(wszystkie_kupony, "kupony_raw")
-    print(f"[Superbet] Surowe dane: {plik_raw}")
+    logger.info(f"[Superbet] Surowe dane: {plik_raw}")
 
     # Podsumowanie BetBuilderów
     n_bb = sum(
@@ -1124,17 +1128,17 @@ def main():
         if z.get("betbuilder")
     )
     if n_bb:
-        print(f"[Superbet] Wykryto {n_bb} zdarzen BetBuilder")
+        logger.info(f"[Superbet] Wykryto {n_bb} zdarzen BetBuilder")
 
     if not brak_ai:
-        print("\n[AI] Analizuje kupony...")
+        logger.info("\n[AI] Analizuje kupony...")
         wyniki_ai = analizuj_kupony_ai(wszystkie_kupony)
 
         plik_ai = _zapisz_cache(wyniki_ai, "kupony_ai")
-        print(f"[AI] Wyniki AI: {plik_ai}")
+        logger.info(f"[AI] Wyniki AI: {plik_ai}")
 
         print("\n" + "=" * 60)
-        print("  PODSUMOWANIE — SUPERBET SUPERSOCIAL")
+        logger.info("  PODSUMOWANIE — SUPERBET SUPERSOCIAL")
         print("=" * 60)
 
         for w in wyniki_ai:
@@ -1142,15 +1146,15 @@ def main():
             bb    = " [BB]" if w.get("betbuilder_wykryty") else ""
             kl    = w.get("kurs_laczny")
             kl_str = f" kurs={kl}" if kl else ""
-            print(f"\n[{ocena}]{bb}{kl_str} — {w.get('nick','?')}")
+            logger.info(f"\n[{ocena}]{bb}{kl_str} — {w.get('nick','?')}")
             for z in w.get("zdarzenia", [])[:5]:
                 bb_tag = " [BetBuilder]" if z.get("betbuilder") else ""
-                print(f"   * {z.get('mecz','?')} | {z.get('typ','?')} @ {z.get('kurs','?')}{bb_tag}")
-            print(f"   {w.get('komentarz','')}")
+                logger.info(f"   * {z.get('mecz','?')} | {z.get('typ','?')} @ {z.get('kurs','?')}{bb_tag}")
+            logger.info(f"   {w.get('komentarz','')}")
         print("=" * 60)
 
     else:
-        print("[Superbet] AI pominiete (--brak-ai)")
+        logger.info("[Superbet] AI pominiete (--brak-ai)")
 
 
 if __name__ == "__main__":

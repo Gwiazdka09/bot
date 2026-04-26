@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 scraper_kursy.py – Scraper kursów bukmacherskich
 Strony: Betexplorer (łatwiejszy) + Oddsportal (zapasowy)
@@ -18,7 +22,7 @@ from datetime import datetime
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 except ImportError:
-    print("BŁĄD: pip install playwright  następnie  playwright install chromium")
+    logger.info("BŁĄD: pip install playwright  następnie  playwright install chromium")
     sys.exit(1)
 
 # ── Konfiguracja ─────────────────────────────────────────────────────
@@ -58,7 +62,7 @@ def _wczytaj_cache(liga: str) -> list | None:
     if sciezka.exists():
         try:
             dane = json.loads(sciezka.read_text(encoding="utf-8"))
-            print(f"[Cache] Załadowano {len(dane)} meczów z pliku {sciezka.name}")
+            logger.info(f"[Cache] Załadowano {len(dane)} meczów z pliku {sciezka.name}")
             return dane
         except Exception:
             pass
@@ -86,11 +90,11 @@ def scrape_betexplorer(liga_slug: str = "premier-league", headless: bool = True)
 
     url = LIGI_BETEXPLORER.get(liga_slug)
     if not url:
-        print(f"[Scraper] Nieznana liga: {liga_slug}")
-        print(f"[Scraper] Dostępne: {', '.join(LIGI_BETEXPLORER.keys())}")
+        logger.info(f"[Scraper] Nieznana liga: {liga_slug}")
+        logger.info(f"[Scraper] Dostępne: {', '.join(LIGI_BETEXPLORER.keys())}")
         return []
 
-    print(f"[Scraper] Scrapuję: {url}")
+    logger.info(f"[Scraper] Scrapuję: {url}")
     mecze = []
 
     with sync_playwright() as p:
@@ -106,13 +110,13 @@ def scrape_betexplorer(liga_slug: str = "premier-league", headless: bool = True)
             try:
                 page.wait_for_selector("table.table-main", timeout=10000)
             except PWTimeout:
-                print("[Scraper] Timeout – strona wolna lub zmienił się układ")
+                logger.info("[Scraper] Timeout – strona wolna lub zmienił się układ")
                 browser.close()
                 return []
 
             # Scrapuj wiersze tabeli
             wiersze = page.query_selector_all("table.table-main tbody tr")
-            print(f"[Scraper] Znaleziono {len(wiersze)} wierszy")
+            logger.info(f"[Scraper] Znaleziono {len(wiersze)} wierszy")
 
             for wiersz in wiersze:
                 try:
@@ -166,17 +170,17 @@ def scrape_betexplorer(liga_slug: str = "premier-league", headless: bool = True)
                     continue
 
         except Exception as e:
-            print(f"[Scraper] Błąd: {e}")
+            logger.info(f"[Scraper] Błąd: {e}")
         finally:
             browser.close()
 
     # Filtruj wpisy bez kursów
     mecze_z_kursami = [m for m in mecze if m["k1"] and m["kX"] and m["k2"]]
-    print(f"[Scraper] Zebrano {len(mecze_z_kursami)} meczów z kursami (z {len(mecze)} łącznie)")
+    logger.info(f"[Scraper] Zebrano {len(mecze_z_kursami)} meczów z kursami (z {len(mecze)} łącznie)")
 
     if mecze_z_kursami:
         sciezka = _zapisz_cache(liga_slug, mecze_z_kursami)
-        print(f"[Scraper] Zapisano do: {sciezka}")
+        logger.info(f"[Scraper] Zapisano do: {sciezka}")
 
     return mecze_z_kursami
 
@@ -197,14 +201,14 @@ def szukaj_kursy_meczu(gospodarz: str, goscie: str, liga: str = "premier-league"
         if (g_low in m_g or m_g in g_low) and (a_low in m_a or m_a in a_low):
             return mecz
 
-    print(f"[Scraper] Nie znaleziono kursów dla: {gospodarz} vs {goscie}")
+    logger.info(f"[Scraper] Nie znaleziono kursów dla: {gospodarz} vs {goscie}")
     return None
 
 
 def pokaz_dostepne_ligi():
-    print("\nDostępne ligi dla scrapera:")
+    logger.info("\nDostępne ligi dla scrapera:")
     for slug, url in LIGI_BETEXPLORER.items():
-        print(f"  {slug:<22} → {url}")
+        logger.info(f"  {slug:<22} → {url}")
     print()
 
 
@@ -216,11 +220,11 @@ if __name__ == "__main__":
         pokaz_dostepne_ligi()
         liga = input("Wybierz ligę (np. premier-league): ").strip() or "premier-league"
 
-    print(f"\nScrapuję kursy dla: {liga}")
+    logger.info(f"\nScrapuję kursy dla: {liga}")
     wyniki = scrape_betexplorer(liga, headless=True)   # headless=True = nie widzisz okna
 
     if wyniki:
-        print(f"\nPierwsze 5 meczów:")
+        logger.info("\nPierwsze 5 meczów:")
         for m in wyniki[:5]:
             print(
                 f"  {m['gospodarz']:25} vs {m['goscie']:25} | "
@@ -228,4 +232,4 @@ if __name__ == "__main__":
                 f"Kursy: 1={m['k1']}  X={m['kX']}  2={m['k2']}"
             )
     else:
-        print("Brak wyników.")
+        logger.info("Brak wyników.")

@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 scraper_sts.py – Scraper kuponów najlepszych typerów z STS Strefa Inspiracji
 ============================================================================
@@ -23,7 +27,7 @@ from datetime import datetime
 try:
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 except ImportError:
-    print("BŁĄD: pip install playwright  następnie  python -m playwright install chromium")
+    logger.info("BŁĄD: pip install playwright  następnie  python -m playwright install chromium")
     sys.exit(1)
 
 from dotenv import load_dotenv
@@ -63,7 +67,7 @@ def zaloguj(page) -> bool:
     haslo = os.getenv("STS_HASLO", "").strip()
 
     if not login or not haslo:
-        print("[STS] Brak STS_LOGIN lub STS_HASLO w .env")
+        logger.info("[STS] Brak STS_LOGIN lub STS_HASLO w .env")
         return False
 
     try:
@@ -96,18 +100,18 @@ def zaloguj(page) -> bool:
         # Sprawdź czy zalogowany (zniknie przycisk "Zaloguj się" lub pojawi się avatar)
         try:
             page.wait_for_selector("button:has-text('Zaloguj się')", state="hidden", timeout=5000)
-            print("[STS] Zalogowano pomyślnie")
+            logger.info("[STS] Zalogowano pomyślnie")
             return True
         except PWTimeout:
             # Sprawdź inaczej
             if page.query_selector("[data-cy='user-avatar'], .user-avatar, .profile-icon"):
-                print("[STS] Zalogowano pomyślnie")
+                logger.info("[STS] Zalogowano pomyślnie")
                 return True
-            print("[STS] Logowanie mogło się nie udać — kontynuuję")
+            logger.info("[STS] Logowanie mogło się nie udać — kontynuuję")
             return True  # Próbuj dalej
 
     except Exception as e:
-        print(f"[STS] Błąd logowania: {e}")
+        logger.info(f"[STS] Błąd logowania: {e}")
         return False
 
 
@@ -133,7 +137,7 @@ def pobierz_typerzy(page, max_typerzy: int = 50) -> list:
             try:
                 page.click(sel, timeout=3000)
                 time.sleep(2)
-                print("[STS] Kliknięto 'Najlepsi'")
+                logger.info("[STS] Kliknięto 'Najlepsi'")
                 break
             except Exception:
                 continue
@@ -143,7 +147,7 @@ def pobierz_typerzy(page, max_typerzy: int = 50) -> list:
             page.wait_for_selector("[data-cy='tipster-card'], .tipster-card, .inspiracje-card",
                                    timeout=8000)
         except PWTimeout:
-            print("[STS] Szukam kart typerów alternatywnie...")
+            logger.info("[STS] Szukam kart typerów alternatywnie...")
 
         # Przewiń żeby załadować wszystkich
         for _ in range(5):
@@ -158,7 +162,7 @@ def pobierz_typerzy(page, max_typerzy: int = 50) -> list:
             ".tipster-item, "
             "div.ng-star-inserted:has(button:has-text('Kupony'))"
         )
-        print(f"[STS] Znaleziono {len(karty)} kart typerów")
+        logger.info(f"[STS] Znaleziono {len(karty)} kart typerów")
 
         for karta in karty[:max_typerzy]:
             try:
@@ -197,10 +201,10 @@ def pobierz_typerzy(page, max_typerzy: int = 50) -> list:
             except Exception:
                 continue
 
-        print(f"[STS] Pobrano {len(typerzy)} typerów")
+        logger.info(f"[STS] Pobrano {len(typerzy)} typerów")
 
     except Exception as e:
-        print(f"[STS] Błąd pobierania typerów: {e}")
+        logger.info(f"[STS] Błąd pobierania typerów: {e}")
 
     return typerzy
 
@@ -236,7 +240,7 @@ def pobierz_kupony_typera(page, nick: str) -> list:
                 continue
 
         if not kliknieto:
-            print(f"  [STS] Nie znaleziono przycisku Kupony dla: {nick}")
+            logger.info(f"  [STS] Nie znaleziono przycisku Kupony dla: {nick}")
             return []
 
         # Sprawdź czy pojawił się modal logowania
@@ -245,7 +249,7 @@ def pobierz_kupony_typera(page, nick: str) -> list:
                 "input[type='email'], input[placeholder*='e-mail']",
                 timeout=2000
             )
-            print(f"  [STS] Pojawił się modal logowania — loguję...")
+            logger.info("  [STS] Pojawił się modal logowania — loguję...")
             zaloguj(page)
             time.sleep(2)
             # Kliknij ponownie po zalogowaniu
@@ -271,7 +275,7 @@ def pobierz_kupony_typera(page, nick: str) -> list:
                 timeout=5000
             )
         except PWTimeout:
-            print(f"  [STS] Brak widocznych kuponów dla: {nick}")
+            logger.info(f"  [STS] Brak widocznych kuponów dla: {nick}")
             return []
 
         elementy = page.query_selector_all(
@@ -308,7 +312,7 @@ def pobierz_kupony_typera(page, nick: str) -> list:
                 continue
 
     except Exception as e:
-        print(f"  [STS] Błąd kuponów dla {nick}: {e}")
+        logger.info(f"  [STS] Błąd kuponów dla {nick}: {e}")
 
     return kupony
 
@@ -320,7 +324,7 @@ def analizuj_kupony_ai(kupony: list) -> list:
     try:
         from footstats.ai.client import zapytaj_ai
     except ImportError:
-        print("[AI] Brak footstats.ai.client — pomijam analizę AI")
+        logger.info("[AI] Brak footstats.ai.client — pomijam analizę AI")
         return kupony
 
     wyniki = []
@@ -371,7 +375,7 @@ Odpowiedz w JSON:
 
         wynik["_oryginal"] = kupon
         wyniki.append(wynik)
-        print(f"  [AI] {nick}: {wynik.get('ocena','?')} — {wynik.get('komentarz','')[:80]}")
+        logger.info(f"  [AI] {nick}: {wynik.get('ocena','?')} — {wynik.get('komentarz','')[:80]}")
 
     return wyniki
 
@@ -389,15 +393,15 @@ def main():
             except ValueError:
                 pass
 
-    print(f"[STS] Scraper Strefa Inspiracji — top {max_top} typerów")
-    print(f"[STS] AI: {'wyłączone' if brak_ai else 'włączone (Groq 70B)'}")
+    logger.info(f"[STS] Scraper Strefa Inspiracji — top {max_top} typerów")
+    logger.info(f"[STS] AI: {'wyłączone' if brak_ai else 'włączone (Groq 70B)'}")
     print()
 
     login = os.getenv("STS_LOGIN", "")
     if not login:
-        print("BŁĄD: Dodaj STS_LOGIN i STS_HASLO do pliku .env")
-        print("  STS_LOGIN=twoj@email.com")
-        print("  STS_HASLO=twoje_haslo")
+        logger.info("BŁĄD: Dodaj STS_LOGIN i STS_HASLO do pliku .env")
+        logger.info("  STS_LOGIN=twoj@email.com")
+        logger.info("  STS_HASLO=twoje_haslo")
         sys.exit(1)
 
     wszystkie_kupony = []
@@ -415,7 +419,7 @@ def main():
 
         try:
             # ── Krok 1: zaloguj się ──────────────────────────────────────────
-            print("[STS] Otwieranie strony...")
+            logger.info("[STS] Otwieranie strony...")
             page.goto(STS_URL, wait_until="domcontentloaded", timeout=30000)
             time.sleep(2)
             _zamknij_popup(page)
@@ -431,11 +435,11 @@ def main():
                 pass
 
             if not zaloguj(page):
-                print("[STS] Nie udało się zalogować automatycznie")
+                logger.info("[STS] Nie udało się zalogować automatycznie")
                 input("Zaloguj się ręcznie w przeglądarce i naciśnij Enter...")
 
             # ── Krok 2: przejdź do Strefy Inspiracji → Najlepsi ──────────────
-            print("[STS] Przechodzę do Strefy Inspiracji → Najlepsi...")
+            logger.info("[STS] Przechodzę do Strefy Inspiracji → Najlepsi...")
 
             page.goto(f"{STS_URL}/strefa-inspiracji", wait_until="domcontentloaded",
                       timeout=20000)
@@ -450,7 +454,7 @@ def main():
                 try:
                     page.click(sel, timeout=3000)
                     time.sleep(2)
-                    print("[STS] Kliknięto 'Najlepsi'")
+                    logger.info("[STS] Kliknięto 'Najlepsi'")
                     break
                 except Exception:
                     continue
@@ -460,7 +464,7 @@ def main():
                 page.screenshot(path="sts_debug_najlepsi.png")
 
             # ── Krok 3: pobierz listę typerów ────────────────────────────────
-            print("[STS] Pobieram listę typerów...")
+            logger.info("[STS] Pobieram listę typerów...")
 
             # Przewiń żeby załadować wszystkich
             for _ in range(5):
@@ -469,7 +473,7 @@ def main():
 
             # Zbierz wszystkie karty typerów — szukaj po przycisku "Kupony"
             kupony_btns = page.query_selector_all("button:has-text('Kupony')")
-            print(f"[STS] Przyciski Kupony: {len(kupony_btns)}")
+            logger.info(f"[STS] Przyciski Kupony: {len(kupony_btns)}")
 
             # Zbierz dane typerów z kart
             import re
@@ -524,14 +528,14 @@ def main():
                     seen.add(t["nick"])
                     typerzy_unikalni.append(t)
 
-            print(f"[STS] Unikalni typerzy z kuponami: {len(typerzy_unikalni)}")
+            logger.info(f"[STS] Unikalni typerzy z kuponami: {len(typerzy_unikalni)}")
 
             # ── Krok 4: kliknij Kupony dla każdego typera ────────────────────
             for idx, typer in enumerate(typerzy_unikalni[:max_top], 1):
                 nick     = typer["nick"]
                 skut     = typer["skutecznosc"]
                 n_kup    = typer["n_kuponow"]
-                print(f"\n[{idx}/{len(typerzy_unikalni[:max_top])}] {nick} ({skut}) — {n_kup} kupon(ów)")
+                logger.info(f"\n[{idx}/{len(typerzy_unikalni[:max_top])}] {nick} ({skut}) — {n_kup} kupon(ów)")
 
                 # Znajdź przycisk Kupony dla tego typera
                 kupony_btns_aktualne = page.query_selector_all("button:has-text('Kupony')")
@@ -586,11 +590,11 @@ def main():
                                               if l.strip()][:25],
                                     "czas": datetime.now().strftime("%Y-%m-%d %H:%M"),
                                 })
-                                print(f"  Kupon: {tresc[:80]}...")
+                                logger.info(f"  Kupon: {tresc[:80]}...")
                         except Exception:
                             continue
                 else:
-                    print(f"  Brak kuponów do sparsowania")
+                    logger.info("  Brak kuponów do sparsowania")
 
                 # Zamknij/wróć
                 for sel in [
@@ -613,44 +617,44 @@ def main():
                     time.sleep(1.5)
 
         except Exception as e:
-            print(f"[STS] Błąd główny: {e}")
+            logger.info(f"[STS] Błąd główny: {e}")
             page.screenshot(path="sts_error.png")
         finally:
             browser.close()
 
     # ── Krok 5: zapisz i analizuj ─────────────────────────────────────────────
-    print(f"\n[STS] Zebrano {len(wszystkie_kupony)} kuponów łącznie")
+    logger.info(f"\n[STS] Zebrano {len(wszystkie_kupony)} kuponów łącznie")
 
     if not wszystkie_kupony:
-        print("[STS] Brak kuponów — sprawdź pliki sts_debug_*.png")
+        logger.info("[STS] Brak kuponów — sprawdź pliki sts_debug_*.png")
         sys.exit(1)
 
     # Zapisz surowe dane
     plik_raw = _zapisz_cache(wszystkie_kupony, "kupony_raw")
-    print(f"[STS] Surowe dane: {plik_raw}")
+    logger.info(f"[STS] Surowe dane: {plik_raw}")
 
     # Analiza AI
     if not brak_ai:
-        print("\n[AI] Analizuję kupony...")
+        logger.info("\n[AI] Analizuję kupony...")
         wyniki_ai = analizuj_kupony_ai(wszystkie_kupony)
 
         plik_ai = _zapisz_cache(wyniki_ai, "kupony_ai")
-        print(f"[AI] Wyniki AI: {plik_ai}")
+        logger.info(f"[AI] Wyniki AI: {plik_ai}")
 
         # Podsumowanie
         print("\n" + "="*60)
-        print("  PODSUMOWANIE KUPONÓW — AI OCENA")
+        logger.info("  PODSUMOWANIE KUPONÓW — AI OCENA")
         print("="*60)
         for w in wyniki_ai:
             ocena = w.get("ocena","?")
             kolor = "[DOBRY]" if ocena == "DOBRY" else "[RYZY]" if ocena == "RYZYKOWNY" else "[?]"
-            print(f"\n{kolor} {w.get('nick','?')} — {ocena}")
+            logger.info(f"\n{kolor} {w.get('nick','?')} — {ocena}")
             for mecz in w.get("mecze", []):
-                print(f"   * {mecz}")
-            print(f"   {w.get('komentarz','')}")
+                logger.info(f"   * {mecz}")
+            logger.info(f"   {w.get('komentarz','')}")
         print("="*60)
     else:
-        print("\n[STS] Analiza AI pominięta (--brak-ai)")
+        logger.info("\n[STS] Analiza AI pominięta (--brak-ai)")
         print("Surowe kupony zapisane do:", plik_raw)
 
 

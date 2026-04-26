@@ -1,5 +1,9 @@
 from pathlib import Path
 from bs4 import BeautifulSoup
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 try:
     from playwright.sync_api import sync_playwright
@@ -28,7 +32,7 @@ def fetch_referees_zawodtyper() -> None:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page()
 
-            print(f"[ZawodTyper] Ładuję stronę: {ZAWODTYPER_URL} ...")
+            logger.info(f"[ZawodTyper] Ładuję stronę: {ZAWODTYPER_URL} ...")
             page.goto(ZAWODTYPER_URL, timeout=30000)
             page.wait_for_timeout(3000) # Czekamy na Vue.js/React hydration
 
@@ -37,7 +41,7 @@ def fetch_referees_zawodtyper() -> None:
             
             soup = BeautifulSoup(content, "html.parser")
             tables = soup.find_all("table")
-            print(f"[ZawodTyper] Znaleziono {len(tables)} tabel. Parsowanie danych...")
+            logger.info(f"[ZawodTyper] Znaleziono {len(tables)} tabel. Parsowanie danych...")
             
             ref_count = 0
             for tbl in tables:
@@ -77,10 +81,10 @@ def fetch_referees_zawodtyper() -> None:
                         except ValueError:
                             pass
             
-            print(f"[ZawodTyper] Zaktualizowano pomyślnie {ref_count} sędziów z {len(tables)} lig.")
+            logger.info(f"[ZawodTyper] Zaktualizowano pomyślnie {ref_count} sędziów z {len(tables)} lig.")
             
     except Exception as e:
-        print(f"[ZawodTyper] Błąd scrape'owania: {e}")
+        logger.error(f"[ZawodTyper] Błąd scrape'owania: {e}")
 
 if __name__ == "__main__":
     fetch_referees_zawodtyper()

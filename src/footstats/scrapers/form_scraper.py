@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 form_scraper.py – Dual form scraper: SofaScore (primary) + FlashScore (fallback)
 
@@ -27,7 +31,7 @@ try:
     PLAYWRIGHT_OK = True
 except ImportError:
     PLAYWRIGHT_OK = False
-    print("[FormScraper] UWAGA: playwright niedostępny, zainstaluj: pip install playwright && playwright install chromium")
+    logger.info("[FormScraper] UWAGA: playwright niedostępny, zainstaluj: pip install playwright && playwright install chromium")
 
 SOFA_BASE = "https://api.sofascore.com/api/v1"
 CACHE_DIR = Path("cache/form")
@@ -76,7 +80,7 @@ def _sofa_fetch(page, path: str) -> Optional[dict]:
         if response is None or response.status >= 400:
             # 404 = brak danych (np. brak kontuzji) — nie logujemy jako błąd
             if response and response.status != 404:
-                print(f"[SofaScore] HTTP {response.status}: {path}")
+                logger.info(f"[SofaScore] HTTP {response.status}: {path}")
             return None
         # JSON jest w <pre> lub bezpośrednio w body
         try:
@@ -85,7 +89,7 @@ def _sofa_fetch(page, path: str) -> Optional[dict]:
             content = page.evaluate("() => document.body.innerText")
         return json.loads(content)
     except Exception as e:
-        print(f"[SofaScore] Wyjątek {path}: {e}")
+        logger.info(f"[SofaScore] Wyjątek {path}: {e}")
         return None
 
 
@@ -140,7 +144,7 @@ def find_team_id(team_name: str, page=None) -> Optional[int]:
                 tid = entity.get("id")
                 name = entity.get("name", "")
                 if tid:
-                    print(f"[SofaScore] ID: {name} = {tid}")
+                    logger.info(f"[SofaScore] ID: {name} = {tid}")
                     _save_cache(cache_key, {"id": tid, "name": name})
                     return tid
     finally:
@@ -148,7 +152,7 @@ def find_team_id(team_name: str, page=None) -> Optional[int]:
             browser.close()
             p.stop()
 
-    print(f"[SofaScore] Nie znaleziono: {team_name}")
+    logger.info(f"[SofaScore] Nie znaleziono: {team_name}")
     return None
 
 
@@ -265,7 +269,7 @@ def get_form_flashscore(team_name: str, page=None) -> Optional[dict]:
                 break
 
         if not team_url:
-            print(f"[FlashScore] Nie znaleziono: {team_name}")
+            logger.info(f"[FlashScore] Nie znaleziono: {team_name}")
             return None
 
         results_url = team_url.rstrip("/") + "/wyniki/"
@@ -310,7 +314,7 @@ def get_form_flashscore(team_name: str, page=None) -> Optional[dict]:
                 continue
 
     except Exception as e:
-        print(f"[FlashScore] Błąd: {e}")
+        logger.info(f"[FlashScore] Błąd: {e}")
         return None
     finally:
         if own_session:
@@ -341,7 +345,7 @@ def pobierz_forme(team_name: str) -> dict:
             data = get_form_sofascore(tid, team_name, page)
             if data.get("form"):
                 return data
-            print(f"[Form] SofaScore: brak zakończonych meczów dla {team_name}")
+            logger.info(f"[Form] SofaScore: brak zakończonych meczów dla {team_name}")
 
         # FlashScore fallback (nowa sesja, stara już skompromitowana)
     finally:
@@ -350,10 +354,10 @@ def pobierz_forme(team_name: str) -> dict:
 
     data_fs = get_form_flashscore(team_name)
     if data_fs and data_fs.get("form"):
-        print(f"[Form] {team_name}: {data_fs['form']} (FlashScore)")
+        logger.info(f"[Form] {team_name}: {data_fs['form']} (FlashScore)")
         return data_fs
 
-    print(f"[Form] Brak danych dla: {team_name}")
+    logger.info(f"[Form] Brak danych dla: {team_name}")
     return _empty_form(team_name, "brak")
 
 
@@ -469,26 +473,26 @@ def formatuj_forme(data: dict) -> str:
 # ── CLI ───────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Użycie:")
-        print("  python -m footstats.scrapers.form_scraper 'Drużyna'")
-        print("  python -m footstats.scrapers.form_scraper 'Gospodarz' 'Gości'")
+        logger.info("Użycie:")
+        logger.info("  python -m footstats.scrapers.form_scraper 'Drużyna'")
+        logger.info("  python -m footstats.scrapers.form_scraper 'Gospodarz' 'Gości'")
         sys.exit(0)
 
     if len(sys.argv) >= 3:
         home, away = sys.argv[1], sys.argv[2]
-        print(f"\n=== MECZ: {home} vs {away} ===\n")
+        logger.info(f"\n=== MECZ: {home} vs {away} ===\n")
         wynik = pobierz_forme_meczu(home, away)
-        print("── GOSPODARZ ──────────────────────────")
+        logger.info("── GOSPODARZ ──────────────────────────")
         print(formatuj_forme(wynik["home"]))
-        print("\n── GOŚĆ ────────────────────────────────")
+        logger.info("\n── GOŚĆ ────────────────────────────────")
         print(formatuj_forme(wynik["away"]))
         if wynik["h2h"]:
-            print("\n── H2H ──────────────────────────────────")
+            logger.info("\n── H2H ──────────────────────────────────")
             for m in wynik["h2h"]:
-                print(f"  {m['date']} {m['perspective']} {m['score']} {m['opponent']}")
+                logger.info(f"  {m['date']} {m['perspective']} {m['score']} {m['opponent']}")
         else:
-            print("\n── H2H: brak wspólnych meczów w ost. 5 ──")
+            logger.info("\n── H2H: brak wspólnych meczów w ost. 5 ──")
     else:
         team = sys.argv[1]
-        print(f"\n=== FORMA: {team} ===\n")
+        logger.info(f"\n=== FORMA: {team} ===\n")
         print(formatuj_forme(pobierz_forme(team)))

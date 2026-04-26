@@ -1,3 +1,7 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
 """
 flashscore_match.py - Scraper szczegółów meczu z Flashscore.pl.
 Nuclear Regex version: przeszukuje surowy HTML.
@@ -74,7 +78,7 @@ def scrape_flashscore_match_details(match_id: str) -> Dict:
             result["success"] = True
             browser.close()
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {{e}")
     return result
 
 # Zachowaj search logic z Turn 60
