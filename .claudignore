@@ -1,0 +1,56 @@
+# ==========================================
+# FootStats .claudignore - Ostateczna Wersja
+# ==========================================
+
+# ── Dane i Bazy (Największa oszczędność tokenów) ──
+data/
+*.db
+*.db-journal
+*.db-wal
+*.parquet
+ai_kolejka_*.json
+ai_typy_*.json
+ai_analiza_*.json
+
+# ── Logi i pliki sesyjne ──
+logs/
+*.log
+next_final.txt
+last_run.txt
+*.tmp
+
+# ── Środowisko i System ──
+.git/
+venv/
+.env
+.env.*
+env_wzor.txt
+__pycache__/
+*.py[cod]
+.vscode/
+.idea/
+.claude/
+
+# ── Playwright i Debug ──
+playwright-report/
+test-results/
+sts_debug_*.png
+superbet_debug_*.png
+*.png
+*.jpg
+*.jpeg
+*.svg
+
+# ── Assety i Dokumentacja ──
+assets/
+docs/
+*.pdf
+dejavu-sans-ttf-*/
+*.ttf
+
+# ── Legacy i Tymczasowe ──
+legacy/
+old/
+*_BACKUP.py
+*_backup.py
+scratch/

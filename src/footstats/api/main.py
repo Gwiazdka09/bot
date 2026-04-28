@@ -50,8 +50,8 @@ class Coupon(BaseModel):
     status: str
     kupon_type: str
     legs: List[Dict]
-    total_odds: float
-    stake_pln: float
+    total_odds: float | None = None
+    stake_pln: float | None = None
     payout_pln: Optional[float]
     roi_pct: Optional[float]
     match_date_first: Optional[str] = None
@@ -354,8 +354,8 @@ class KellyRequest(BaseModel):
 
 class PlaceCouponRequest(BaseModel):
     selections: List[SelectionItem]
-    total_odds: float
-    stake_pln: float
+    total_odds: float | None = None
+    stake_pln: float | None = None
     match_date: Optional[str] = None
 
 
