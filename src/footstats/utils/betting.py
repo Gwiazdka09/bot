@@ -85,21 +85,3 @@ def oblicz_tip_correct(ai_tip: str, actual_result) -> int | None:
         return 1 if not btts else 0
 
     return None
-
-def normalize_team_name(name: str) -> str:
-    """Normalizacja nazwy drużyny do porównań."""
-    if not name: return ""
-    name = name.lower()
-    name = re.sub(r"[^a-z0-9\s]", "", name)
-    name = re.sub(r"\s+", " ", name).strip()
-    
-    mappings = {
-        "manchester united": "man utd",
-        "manchester city": "man city",
-        "tottenham hotspur": "tottenham",
-        "newcastle united": "newcastle",
-        "west ham united": "west ham",
-        "legia warszawa": "legia",
-        "lech poznan": "lech",
-    }
-    return mappings.get(name, name)

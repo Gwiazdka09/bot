@@ -36,61 +36,28 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
+from footstats.scrapers.base_playwright import (
+    SUPERBET_CONFIG as _CFG,
+    zamknij_popup as _zamknij_popup_base,
+    akceptuj_cookies as _akceptuj_cookies_base,
+    zapisz_cache as _zapisz_cache_base,
+)
+
 SUPERBET_URL = "https://www.superbet.pl"
 SOCIAL_URL   = f"{SUPERBET_URL}/social"
 CACHE_DIR    = Path("cache/superbet")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────
+# ── Helpers (popup/cache delegated to base_playwright) ────────────────
 
 def _zamknij_popup(page) -> None:
-    for sel in [
-        "#onetrust-accept-btn-handler",
-        "button:has-text('Akceptuję')",
-        "button:has-text('Zgadzam się')",
-        "button:has-text('Akceptuj wszystkie')",
-        "button:has-text('Akceptuj')",
-        "button:has-text('Zamknij')",
-        "[aria-label='close']",
-        "[aria-label='Zamknij']",
-        "button.close",
-    ]:
-        try:
-            page.click(sel, timeout=2000)
-            time.sleep(0.4)
-            return
-        except Exception:
-            pass
-
+    _zamknij_popup_base(page, _CFG)
 
 def _akceptuj_cookies(page) -> None:
-    """Akceptuje baner cookie zanim cokolwiek innego zrobimy."""
-    for sel in [
-        "#onetrust-accept-btn-handler",
-        "button:has-text('Akceptuj wszystkie')",
-        "button:has-text('Akceptuję')",
-        "button:has-text('Akceptuj')",
-        "button:has-text('Zgadzam się')",
-        "[data-testid='cookie-accept']",
-        ".cookie-accept",
-    ]:
-        try:
-            page.wait_for_selector(sel, timeout=5000)
-            page.click(sel)
-            logger.info("[Superbet] Zaakceptowano cookies")
-            time.sleep(1)
-            return
-        except Exception:
-            pass
-    logger.info("[Superbet] Baner cookie nie pojawil sie lub juz zaakceptowany")
-
+    _akceptuj_cookies_base(page, _CFG)
 
 def _zapisz_cache(dane: list, nazwa: str = "kupony") -> Path:
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime("%Y%m%d_%H%M")
-    sciezka = CACHE_DIR / f"{nazwa}_{ts}.json"
-    sciezka.write_text(json.dumps(dane, ensure_ascii=False, indent=2), encoding="utf-8")
-    return sciezka
+    return _zapisz_cache_base(dane, _CFG, nazwa)
 
 
 # ── Logowanie ─────────────────────────────────────────────────────────────

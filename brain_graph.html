@@ -2,113 +2,55 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>FootStats Second Mind - Graph View</title>
+    <title>FootStats v3.2 — Full Project Graph</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <!-- VIS-NETWORK CDN -->
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/vis-network/standalone/umd/vis-network-custom.min.css">
-
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #0a0e27 0%, #1a1a2e 100%);
             color: #e0e0e0;
             overflow: hidden;
         }
-
         #header {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            z-index: 100;
-            background: rgba(26, 26, 46, 0.9);
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #FF1493;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            max-width: 350px;
+            position: absolute; top: 15px; left: 15px; z-index: 100;
+            background: rgba(26,26,46,0.92); padding: 16px; border-radius: 10px;
+            border-left: 4px solid #FF1493; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            max-width: 320px;
         }
-
-        #header h1 {
-            color: #FF1493;
-            margin-bottom: 10px;
-            font-size: 20px;
+        #header h1 { color: #FF1493; margin-bottom: 6px; font-size: 18px; }
+        #header p { color: #a0a0a0; font-size: 11px; line-height: 1.4; }
+        .stats { color: #FFD700; font-size: 11px; margin-top: 6px; }
+        #filter-bar {
+            position: absolute; top: 15px; left: 350px; z-index: 100;
+            background: rgba(26,26,46,0.92); padding: 10px 14px; border-radius: 8px;
+            display: flex; gap: 6px; flex-wrap: wrap;
         }
-
-        #header p {
-            color: #a0a0a0;
-            font-size: 12px;
-            line-height: 1.5;
-            margin-bottom: 10px;
+        .filter-btn {
+            padding: 4px 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05); color: #ccc; cursor: pointer; font-size: 11px;
+            transition: all 0.2s;
         }
-
+        .filter-btn:hover { background: rgba(255,255,255,0.15); }
+        .filter-btn.active { border-color: #FF1493; color: #FF1493; background: rgba(255,20,147,0.15); }
         .legend {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            z-index: 100;
-            background: rgba(26, 26, 46, 0.95);
-            padding: 20px;
-            border-radius: 10px;
-            border-left: 4px solid #4169E1;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-            max-width: 250px;
-            font-size: 12px;
+            position: absolute; bottom: 15px; right: 15px; z-index: 100;
+            background: rgba(26,26,46,0.95); padding: 14px; border-radius: 10px;
+            border-left: 4px solid #4169E1; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            max-width: 220px; font-size: 11px;
         }
-
-        .legend h3 {
-            color: #4169E1;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-
-        .legend-item {
-            display: flex;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
+        .legend h3 { color: #4169E1; margin-bottom: 8px; font-size: 13px; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
         .legend-color {
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            margin-right: 10px;
-            border: 2px solid rgba(255, 255, 255, 0.2);
+            width: 16px; height: 16px; border-radius: 50%; margin-right: 8px;
+            border: 2px solid rgba(255,255,255,0.2); flex-shrink: 0;
         }
-
-        #mynetwork {
-            width: 100%;
-            height: 100vh;
-            background: radial-gradient(circle at 20% 50%, rgba(147, 112, 219, 0.1) 0%, transparent 50%);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .vis-network {
-            background: transparent !important;
-        }
-
-        .vis-label {
-            color: #e0e0e0;
-            font-weight: normal;
-            text-align: center;
-        }
-
+        #mynetwork { width: 100%; height: 100vh; }
         .vis-tooltip {
-            background: rgba(26, 26, 46, 0.95);
-            border: 1px solid #FF1493;
-            color: #e0e0e0;
-            border-radius: 5px;
-            padding: 10px;
-            font-size: 12px;
-            max-width: 200px;
-            word-wrap: break-word;
+            background: rgba(26,26,46,0.95) !important; border: 1px solid #FF1493 !important;
+            color: #e0e0e0 !important; border-radius: 5px !important; padding: 10px !important;
+            font-size: 12px !important; max-width: 280px !important; white-space: pre-wrap !important;
         }
     </style>
 </head>
@@ -116,173 +58,321 @@
     <div id="mynetwork"></div>
 
     <div id="header">
-        <h1>Second Mind</h1>
-        <p>FootStats v3.2 — Interaktywna mapa przepływu danych i AI-feedback loop</p>
-        <p style="color: #FF1493; font-weight: bold;">RAG Memory: ai_feedback table</p>
+        <h1>FootStats v3.2 — Full Project Map</h1>
+        <p>Interaktywna mapa całego projektu: moduły, przepływ danych, AI pipeline</p>
+        <div class="stats" id="stats-line"></div>
+    </div>
+
+    <div id="filter-bar">
+        <div class="filter-btn active" data-group="all">ALL</div>
+        <div class="filter-btn" data-group="orchestration">Orchestration</div>
+        <div class="filter-btn" data-group="ai">AI / RAG</div>
+        <div class="filter-btn" data-group="core">Core Logic</div>
+        <div class="filter-btn" data-group="scrapers">Scrapers</div>
+        <div class="filter-btn" data-group="data">Data</div>
+        <div class="filter-btn" data-group="export">Export</div>
+        <div class="filter-btn" data-group="api">API / Dashboard</div>
+        <div class="filter-btn" data-group="utils">Utils</div>
+        <div class="filter-btn" data-group="db">Database</div>
+        <div class="filter-btn" data-group="tests">Tests</div>
+        <div class="filter-btn" data-group="infra">Infra / Config</div>
     </div>
 
     <div class="legend">
         <h3>LEGENDA</h3>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #FFD700;"></div>
-            <span>Agenty (Orchestration)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #9370DB;"></div>
-            <span>AI/RAG/LLM</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #4169E1;"></div>
-            <span>Frontend/API</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #32CD32;"></div>
-            <span>Database (Tables)</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #FF1493;"></div>
-            <span style="font-weight: bold;">RAG Memory</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #FF8C00;"></div>
-            <span>Kelly Calibration</span>
-        </div>
-        <div class="legend-item">
-            <div class="legend-color" style="background-color: #808080;"></div>
-            <span>Configuration</span>
-        </div>
+        <div class="legend-item"><div class="legend-color" style="background:#FFD700"></div><span>Orchestration / Agents</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#9370DB"></div><span>AI / LLM / RAG</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#00CED1"></div><span>Core Logic</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#FF6347"></div><span>Scrapers</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#6495ED"></div><span>Data Layer</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#4169E1"></div><span>API / Dashboard</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#20B2AA"></div><span>Export (PDF/JSON)</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#778899"></div><span>Utils / Helpers</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#32CD32"></div><span>Database Tables</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#FF1493"></div><span>RAG Memory</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#8FBC8F"></div><span>Tests</span></div>
+        <div class="legend-item"><div class="legend-color" style="background:#808080"></div><span>Infra / Config</span></div>
     </div>
 
-    <script type="text/javascript">
-        // Nodes data
-        var nodesData = [
-            // === ORCHESTRATION (Gold) ===
-            {"id": "scheduler", "label": "daily_agent_scheduler.py\n(SCHEDULER)", "color": "#FFD700", "title": "Task Scheduler @08:00\ndraft \u2192 wait \u2192 final\nPolls next_final.txt", "size": 38, "font": {"size": 15, "bold": "true"}, "shape": "dot"},
-            {"id": "daily_agent", "label": "daily_agent.py\n(8-STEP PIPELINE)", "color": "#FFD700", "title": "G\u0142\u00f3wny orchestrator v3.2\nKROK 0: settlement + AI feedback\nKROK 0b-0d: referees, forma\nKROK 1: Bzzoiro ML\nKROK 2-3: Groq analysis\nKROK 4: save coupon", "size": 42, "font": {"size": 16, "bold": "true"}, "shape": "dot"},
-            {"id": "evening_agent", "label": "evening_agent.py\n(SETTLEMENT)", "color": "#FFC700", "title": "Zamykanie kupon\u00f3w ACTIVE\u2192WIN/LOSE\nUpdate coupons + bankroll", "size": 35, "font": {"size": 14}, "shape": "dot"},
+    <script>
+    // ======= NODES =======
+    var nodesData = [
+        // === ORCHESTRATION (Gold) ===
+        {id:"scheduler", label:"daily_agent_scheduler.py\n(SCHEDULER)", group:"orchestration", color:"#FFD700", size:38, title:"Task Scheduler @08:00\nrun_draft_phase() → wait_and_run_final()\nPolls next_final.txt co 5 min"},
+        {id:"daily_agent", label:"daily_agent.py\n(8-STEP PIPELINE)", group:"orchestration", color:"#FFD700", size:45, title:"Główny orchestrator v3.2\nKROK 0: results_updater + settlement\nKROK 0b: post_match_analyzer\nKROK 0d: referees fetch\nKROK 1: Bzzoiro ML + forma\nDraft: Groq analysis → coupon A+B\nFinal: re-analysis + lineups\n\nFunkcje: _pobierz_kandydatow, _wzbogac_forme_top,\n_wzbogac_o_betbuilder, _analizuj_groq,\n_weryfikuj_kupony, _zapisz_txt, _dodaj_kelly,\n_waliduj_kupon_groq, _enrichuj_finalna_faza,\n_pre_filtruj_kursy, _oblicz_roznica_modeli"},
+        {id:"evening_agent", label:"evening_agent.py\n(SETTLEMENT @23:00)", group:"orchestration", color:"#FFC700", size:35, title:"Weryfikacja kuponów ACTIVE→WIN/LOSE\nAPI-Football results + Telegram summary\nFunkcje: run_evening_agent, _fetch_results_today,\n_find_result, _status_kuponu, _send_telegram_summary"},
+        {id:"cli", label:"cli.py\n(MAIN MENU)", group:"orchestration", color:"#DAA520", size:32, title:"FootStats CLI — MODUL 18\nInteractive menu: liga, analiza, pewniaczki\nFunkcje: main, _wyswietl_ai_pewniaczki,\n_ai_blok_pewniaczki, _analiza_kuponu"},
+        {id:"run_daily_bat", label:"run_daily.bat", group:"infra", color:"#808080", size:22, title:"Entry point for Task Scheduler\nUruchamia daily_agent_scheduler.py"},
+        {id:"cichy_bot_bat", label:"cichy_bot.bat", group:"infra", color:"#808080", size:18, title:"Silent bot runner"},
 
-            // === AI / RAG / LLM (Purple) ===
-            {"id": "analyzer", "label": "analyzer.py\n(GROQ LLM)", "color": "#9370DB", "title": "Groq llama-3.1-8b-instant\nUltra-skeptical confidence 0-100\n22+ bet types JSON schema\nSemantic RAG context injection", "size": 42, "font": {"size": 16, "bold": "true"}, "shape": "dot"},
-            {"id": "post_match_analyzer", "label": "post_match_analyzer.py\n(FEEDBACK)", "color": "#BA55D3", "title": "AI Feedback Loop (Etap 7)\nGeneruje wnioski z przegranych kupon\u00f3w\nAuto-embed do RAG", "size": 35, "font": {"size": 13}, "shape": "dot"},
-            {"id": "rag_embeddings", "label": "rag_embeddings.py\n(EMBEDDINGS)", "color": "#FF1493", "title": "Sentence-Transformers\nparaphrase-multilingual-MiniLM-L12-v2\n384-dim cosine similarity\n220+ embedded lessons", "size": 36, "font": {"size": 13, "bold": "true"}, "shape": "dot", "borderWidth": 3},
-            {"id": "rag", "label": "rag.py\n(RETRIEVAL)", "color": "#FF1493", "title": "retrieve_relevant_lessons()\nSemantic top-k + chronological fallback\nFed into Groq prompt", "size": 32, "font": {"size": 12}, "shape": "dot"},
-            {"id": "trainer", "label": "trainer.py\n(TRAINING)", "color": "#DA70D6", "title": "RAG Knowledge Base Management\nOptional fine-tuning support", "size": 28, "font": {"size": 11}, "shape": "dot"},
+        // === AI / RAG / LLM (Purple) ===
+        {id:"analyzer", label:"analyzer.py\n(GROQ ANALYZER)", group:"ai", color:"#9370DB", size:45, title:"Groq llama-3.1-8b-instant\nUltra-skeptical confidence 0-100\n22+ bet types JSON schema\n\nFunkcje: ai_analiza_pewniaczki (główna),\nanalizuj_mecz_ai, analizuj_liste_meczow,\n_buduj_opis_meczu (866 linii!), _wzbogac_forme,\n_sygnaly_summary, _auto_zapisz_backtest,\n_deduplikuj_kupony, _wymusz_40pct,\n_value_bet, _kurs_do_prob, _wyciagnij_json"},
+        {id:"ai_client", label:"client.py\n(AI CLIENT)", group:"ai", color:"#BA55D3", size:28, title:"Multi-provider AI client\nGroq (online, free, 70B) → Ollama (local, 2B)\nFunkcje: zapytaj_ai, _groq, _ollama"},
+        {id:"post_match", label:"post_match_analyzer.py\n(FEEDBACK LOOP)", group:"ai", color:"#BA55D3", size:34, title:"AI Feedback Loop (Etap 7)\nAnaliza przegranych kuponów → wnioski do RAG\nFunkcje: analizuj_porazki, _pobierz_porazki,\n_zapisz_feedback, pobierz_ostatnie_wnioski"},
+        {id:"rag", label:"rag.py\n(RAG RETRIEVAL)", group:"ai", color:"#FF1493", size:32, title:"Pattern-based + Semantic RAG\nwyciagnij_faktory → pobierz_rag_wzorce\npobierz_rag_kontekst → inject to Groq\nretrieve_relevant_lessons (embeddings)"},
+        {id:"rag_embed", label:"rag_embeddings.py\n(EMBEDDINGS)", group:"ai", color:"#FF1493", size:34, title:"sentence-transformers\nparaphrase-multilingual-MiniLM-L12-v2\n384-dim cosine similarity\nEmbeddingStore class + backfill_embeddings"},
+        {id:"trainer", label:"trainer.py\n(TRAINER)", group:"ai", color:"#DA70D6", size:26, title:"Groq marchewka i kij\nload_lessons, save_lessons,\nask_groq_trainer, train,\nget_kalibracja_inject"},
 
-            // === CORE LOGIC (Cyan) ===
-            {"id": "bet_builder", "label": "bet_builder.py\n(POISSON)", "color": "#00CED1", "title": "Bivariate Poisson + Dixon-Coles\n22+ market suggestions\nCorners, Cards, Handicap, BetBuilder\nHalf-time, Goal ranges", "size": 34, "font": {"size": 13}, "shape": "dot"},
-            {"id": "quick_picks", "label": "quick_picks.py\n(PEWNIACZKI)", "color": "#00CED1", "title": "Szybkie Pewniaczki 48h\nScout Bot EV analysis\nKupon analyzer", "size": 30, "font": {"size": 12}, "shape": "dot"},
+        // === CORE LOGIC (Cyan) ===
+        {id:"poisson", label:"poisson.py\n(POISSON)", group:"core", color:"#00CED1", size:30, title:"Bivariate Poisson model\npredict_match() → P(home), P(draw), P(away)"},
+        {id:"bet_builder", label:"bet_builder.py\n(BET BUILDER)", group:"core", color:"#00CED1", size:34, title:"Dixon-Coles + Poisson\n22+ market suggestions\nprobability_matrix, estimate_lambdas_from_probs,\nget_betbuilder_suggestions, get_card_suggestions,\nget_corner_suggestions, get_all_market_suggestions"},
+        {id:"quick_picks", label:"quick_picks.py\n(PEWNIACZKI)", group:"core", color:"#00CED1", size:30, title:"Szybkie Pewniaczki 48h\nszybkie_pewniaczki_2dni, _scout_bot_ocen,\nwyswietl_szybkie_pewniaczki"},
+        {id:"weekly_picks", label:"weekly_picks.py\n(WEEKLY PICKS)", group:"core", color:"#00CED1", size:28, title:"pewniaczki_tygodnia, wyswietl_pewniaczki,\neksportuj_pdf_pewniaczki\n_typy_pewne, _bzz_parse_prob, _ml_do_predykcji"},
+        {id:"kelly", label:"kelly.py\n(KELLY MATH)", group:"core", color:"#00CED1", size:25, title:"Kelly Criterion formula\nkelly_stake, kelly_kupon, dynamic_stake,\nev_netto, format_kelly_info"},
+        {id:"calibration", label:"calibration.py\n(CALIBRATION)", group:"core", color:"#FF8C00", size:28, title:"Etap 6: Kelly calibration\nHit-rate multiplier (0.7/1.0/1.1)\nForm streak override\nget_stake_multiplier, get_forma_multiplier"},
+        {id:"backtest", label:"backtest.py\n(BACKTEST DB)", group:"core", color:"#FF8C00", size:30, title:"SQLite backtest tracking\nsave_prediction, update_result, get_stats,\nget_pending_results, get_weakness_report,\npobierz_kalibracje_backtest + CLI"},
+        {id:"backtest_engine", label:"backtest_engine.py\n(BACKTEST ENGINE)", group:"core", color:"#FF8C00", size:28, title:"Historical backtest runner\nbacktest_period → AI analysis → RAG feedback\nLangfuse integration optional"},
+        {id:"coupon_tracker", label:"coupon_tracker.py\n(COUPON CRUD)", group:"core", color:"#00CED1", size:28, title:"SQLite CRUD dla kuponów\nsave_coupon, update_coupon_status,\nget_active_coupons, promote_to_active,\nget_coupon_legs, get_draft_today"},
+        {id:"coupon_settlement", label:"coupon_settlement.py\n(SETTLEMENT)", group:"core", color:"#00CED1", size:28, title:"Rozliczanie ACTIVE kuponów\nsettle_active_coupons + FlashScore fallback\n_send_to_rag_feedback, _generate_lesson"},
+        {id:"bankroll", label:"bankroll.py\n(BANKROLL)", group:"core", color:"#00CED1", size:25, title:"Bankroll management\nget_current_bankroll, update_bankroll,\nprocess_bet, process_win"},
+        {id:"decision_score", label:"decision_score.py\n(SCORING)", group:"core", color:"#00CED1", size:24, title:"Score 0-100 per coupon leg\nscore_kandydat, is_go"},
+        {id:"ensemble", label:"ensemble.py\n(ENSEMBLE)", group:"core", color:"#00CED1", size:22, title:"Poisson 45% + Bzzoiro 55%\nensemble_probs, get_roznica"},
+        {id:"xg_lambda", label:"xg_lambda.py\n(xG LAMBDA)", group:"core", color:"#00CED1", size:22, title:"xG-based lambda estimation\nxg_lambda, xg_lambda_pair"},
+        {id:"value_bet", label:"value_bet.py\n(VALUE BET)", group:"core", color:"#00CED1", size:20, title:"typy_zaklady → bet suggestions"},
+        {id:"confidence", label:"confidence.py\n(KOMENTARZ)", group:"core", color:"#00CED1", size:20, title:"komentarz_analityka → text summary"},
+        {id:"walkforward", label:"walkforward.py\n(WALK-FORWARD)", group:"core", color:"#FF8C00", size:26, title:"Walk-forward backtest\nrun_walkforward, predict_single,\nraport_walkforward"},
+        {id:"queue_analysis", label:"queue_analysis.py\n(KOLEJKA)", group:"core", color:"#00CED1", size:22, title:"analiza_kolejki → batch analysis"},
+        {id:"pattern_analyzer", label:"pattern_analyzer.py\n(PATTERNS)", group:"core", color:"#00CED1", size:24, title:"Historical pattern detection\nanalyze_results_by_league, analyze_odds_calibration,\nanalyze_form_vs_result, analyze_goals_distribution,\nextract_marchewki_i_kije"},
+        {id:"h2h", label:"h2h.py\n(H2H)", group:"core", color:"#00CED1", size:22, title:"AnalizaH2H class\nHead-to-head analysis"},
+        {id:"form_core", label:"form.py\n(FORMA)", group:"core", color:"#00CED1", size:22, title:"pobierz_forme, porownaj_forme,\nAnalizaDomWyjazd class"},
+        {id:"classifier", label:"classifier.py\n(CLASSIFIER)", group:"core", color:"#00CED1", size:22, title:"KlasyfikatorMeczu class\n_korekta_rewanz_v26, _korekta_dwumecz"},
+        {id:"importance", label:"importance.py\n(IMPORTANCE)", group:"core", color:"#00CED1", size:20, title:"ImportanceIndex class"},
+        {id:"fatigue", label:"fatigue.py\n(FATIGUE)", group:"core", color:"#00CED1", size:20, title:"HeurystaZmeczeniaRotacji class"},
+        {id:"fortress", label:"fortress.py\n(FORTRESS)", group:"core", color:"#00CED1", size:20, title:"HomeFortress class"},
 
-            // === SCRAPERS (Orange/Red) ===
-            {"id": "bzzoiro", "label": "bzzoiro.py\n(ML API)", "color": "#FF6347", "title": "Bzzoiro CatBoost ML\n47 leagues, predictions + odds\nRAM cache with TTL", "size": 34, "font": {"size": 13}, "shape": "dot"},
-            {"id": "form_scraper", "label": "form_scraper.py\n(FORMA)", "color": "#FF6347", "title": "SofaScore + FlashScore\nForma, kontuzje, H2H\nPlaywright headless", "size": 30, "font": {"size": 12}, "shape": "dot"},
-            {"id": "referees", "label": "zawodtyper_referees.py\n(S\u0118DZIOWIE)", "color": "#FF6347", "title": "zawodtyper.pl scraper\navg_yellow, avg_red, n_matches\nWp\u0142ywa na AI confidence", "size": 28, "font": {"size": 11}, "shape": "dot"},
-            {"id": "flashscore", "label": "flashscore_match.py\n(DETAILS)", "color": "#FF6347", "title": "Match details: referee, stadium\nPlaywright + Nuclear Regex\nAbsencje parsing", "size": 26, "font": {"size": 11}, "shape": "dot"},
+        // === SCRAPERS (Red/Orange) ===
+        {id:"bzzoiro", label:"bzzoiro.py\n(ML API)", group:"scrapers", color:"#FF6347", size:34, title:"BzzoiroClient class\nCatBoost ML predictions + odds\n47 leagues, RAM cache\npredykcje_tygodnia, waliduj"},
+        {id:"form_scraper", label:"form_scraper.py\n(FORMA SCRAPER)", group:"scrapers", color:"#FF6347", size:30, title:"SofaScore + FlashScore\npobierz_forme, pobierz_forme_meczu,\nget_form_sofascore, get_form_flashscore,\nfind_team_id, formatuj_forme"},
+        {id:"referees", label:"zawodtyper_referees.py\n(SĘDZIOWIE)", group:"scrapers", color:"#FF6347", size:26, title:"zawodtyper.pl scraper\nfetch_referees_zawodtyper\navg_yellow, avg_red, n_matches"},
+        {id:"referee_db", label:"referee_db.py\n(REF DB)", group:"scrapers", color:"#FF6347", size:22, title:"SQLite referee storage\nupsert_referee, get_referee, referee_signal"},
+        {id:"flashscore", label:"flashscore_match.py\n(MATCH DETAILS)", group:"scrapers", color:"#FF6347", size:24, title:"Playwright: match details\nscrape_flashscore_match_details,\nsearch_flashscore_match_id"},
+        {id:"flashscore_results", label:"flashscore_results.py\n(RESULTS FALLBACK)", group:"scrapers", color:"#FF6347", size:22, title:"FlashScore mobi fallback\nget_match_result, _parse_mobi_html"},
+        {id:"api_football", label:"api_football.py\n(API-FOOTBALL)", group:"scrapers", color:"#FF6347", size:30, title:"APIFootball class\napi-sports.io (100 req/day)\nFixtures, results, stats"},
+        {id:"football_data", label:"football_data.py\n(FD.CO.UK)", group:"scrapers", color:"#FF6347", size:24, title:"APIClient class\nfootball-data.co.uk API"},
+        {id:"enriched", label:"enriched.py\n(ENRICHMENT)", group:"scrapers", color:"#FF6347", size:26, title:"Data enrichment layer\npobierz_kontuzje, pobierz_konferencje,\npobierz_forme_xg, enrich_match_data\nOwn cache: _cache_get/_cache_set"},
+        {id:"kursy", label:"kursy.py\n(BETEXPLORER)", group:"scrapers", color:"#FF6347", size:22, title:"BetExplorer odds scraper\nscrape_betexplorer, szukaj_kursy_meczu"},
+        {id:"sts", label:"sts.py\n(STS TYPERZY)", group:"scrapers", color:"#FF6347", size:22, title:"Strefa Inspiracji (Playwright)\npobierz_typerzy, pobierz_kupony_typera,\nanalizuj_kupony_ai"},
+        {id:"superbet", label:"superbet.py\n(SUPERBET)", group:"scrapers", color:"#FF6347", size:24, title:"SuperBet scraper (Playwright)\npobierz_typerzy, pobierz_kupony_typera,\npobierz_kupony_api, analizuj_kupony_ai\n1032 lines — largest scraper"},
+        {id:"superoferta", label:"superoferta.py\n(SUPEROFERTA)", group:"scrapers", color:"#FF6347", size:22, title:"SuperOferta boosted odds\npobierz_superoferty, dodaj_ev_bzzoiro"},
+        {id:"lineup_scraper", label:"lineup_scraper.py\n(LINEUPS)", group:"scrapers", color:"#FF6347", size:20, title:"API-Football lineups\nget_lineup, lineup_confidence_penalty"},
+        {id:"source_manager", label:"source_manager.py\n(SOURCES)", group:"scrapers", color:"#FF6347", size:20, title:"SourceManager class\nMulti-source data routing"},
+        {id:"scraper_base", label:"base.py\n(HTTP BASE)", group:"scrapers", color:"#FF6347", size:18, title:"_http_get with rate limiting"},
+        {id:"results_updater", label:"results_updater.py\n(RESULTS UPDATE)", group:"scrapers", color:"#6495ED", size:30, title:"Auto-update match results (48h)\nupdate_pending, update_active_coupons,\n_znajdz_wynik, _fetch_fixtures"},
 
-            // === FRONTEND / API (Blue) ===
-            {"id": "api_main", "label": "api/main.py\n(FastAPI 12ep)", "color": "#4169E1", "title": "REST API + Dashboard\n12 endpoints incl. bankroll, ROI\nServes preview.html", "size": 35, "font": {"size": 14}, "shape": "dot"},
-            {"id": "preview", "label": "preview.html\n(Dashboard)", "color": "#1E90FF", "title": "Interactive Dashboard\nCoupons, settlement, ROI\nAccordion history", "size": 30, "font": {"size": 12}, "shape": "dot"},
+        // === DATA (Steel Blue) ===
+        {id:"historical_loader", label:"historical_loader.py\n(HIST DATA)", group:"data", color:"#6495ED", size:28, title:"3 sources: football-data.co.uk,\nxgabora GitHub, FBref xG\ndownload_all, load_cached,\nmerge_xg_into_dataset"},
+        {id:"context_scraper", label:"context_scraper.py\n(MATCH CONTEXT)", group:"data", color:"#6495ED", size:22, title:"Match context enrichment\nget_match_context with disk cache"},
+        {id:"data_fetcher", label:"data_fetcher.py\n(FETCHER)", group:"data", color:"#6495ED", size:24, title:"Interactive data fetching\npobierz_dane, wyswietl_menu_lig_v27"},
 
-            // === DATABASE (Green) ===
-            {"id": "coupons_db", "label": "coupons\n(TABLE)", "color": "#32CD32", "title": "Kupony: status, stake, odds, legs\nACTIVE/WIN/LOSE lifecycle", "size": 35, "font": {"size": 13}, "shape": "dot"},
-            {"id": "predictions_db", "label": "predictions\n(TABLE)", "color": "#3CB371", "title": "Wyniki mecz\u00f3w + predykcje\nresult, xG, lambda, odds", "size": 30, "font": {"size": 12}, "shape": "dot"},
-            {"id": "ai_feedback_db", "label": "ai_feedback\n(RAG MEMORY)", "color": "#FF1493", "title": "RAG Memory \u2014 220+ lessons\nStored by post_match_analyzer\nEmbedded by rag_embeddings\nRetrieved semantically", "size": 40, "font": {"size": 14, "bold": "true", "color": "white"}, "shape": "dot", "borderWidth": 3},
-            {"id": "embeddings_db", "label": "ai_feedback_embeddings\n(VECTORS)", "color": "#FF1493", "title": "384-dim float32 BLOB\nCosine similarity search\nLinked to ai_feedback by ID", "size": 30, "font": {"size": 12}, "shape": "dot", "borderWidth": 2},
-            {"id": "bankroll_db", "label": "bankroll_state\n(TABLE)", "color": "#3CB371", "title": "Kelly bankroll tracking\nStake history, ROI", "size": 26, "font": {"size": 11}, "shape": "dot"},
-            {"id": "settlement_db", "label": "coupon_settlement\n(TABLE)", "color": "#3CB371", "title": "Settlement audit log\nWIN/LOSE timestamps", "size": 26, "font": {"size": 11}, "shape": "dot"},
-            {"id": "db_main", "label": "footstats_backtest.db\n(SQLite)", "color": "#228B22", "title": "Main database: 6 tables\ncoupons, predictions, ai_feedback\nai_feedback_embeddings\nbankroll_state, coupon_settlement", "size": 34, "font": {"size": 12}, "shape": "dot"},
+        // === EXPORT (Teal) ===
+        {id:"pdf", label:"pdf.py\n(PDF EXPORT)", group:"export", color:"#20B2AA", size:24, title:"ReportLab PDF generation\neksportuj_pdf"},
+        {id:"pdf_font", label:"pdf_font.py\n(FONT)", group:"export", color:"#20B2AA", size:16, title:"DejaVuSans font registration"},
+        {id:"tables", label:"tables.py\n(RICH TABLES)", group:"export", color:"#20B2AA", size:24, title:"Rich console display\nwyswietl_naglowek, wyswietl_tabele,\nwyswietl_wyniki, wyswietl_predykcje"},
+        {id:"json_export", label:"json_export.py\n(JSON)", group:"export", color:"#20B2AA", size:22, title:"JSON export: coupons, bankroll,\nai_feedback, daily_summary"},
+        {id:"weekly_report", label:"weekly_report.py\n(WEEKLY)", group:"export", color:"#20B2AA", size:22, title:"Weekly report: accuracy/ROI\nGroq summary + Telegram"},
 
-            // === CALIBRATION (Orange) ===
-            {"id": "backtest", "label": "backtest.py\n(BACKTEST)", "color": "#FF8C00", "title": "Walk-forward validation\nKelly calibration loop", "size": 30, "font": {"size": 12}, "shape": "dot"},
-            {"id": "calibration", "label": "calibration.py\n(KELLY)", "color": "#FF7F50", "title": "Kelly Criterion (Etap 6)\nHit-rate multiplier (0.7/1.0/1.1)\nForm streak override", "size": 28, "font": {"size": 11}, "shape": "dot"},
-            {"id": "kelly", "label": "kelly.py\n(KELLY MATH)", "color": "#FFA500", "title": "Kelly formula\nStake calculation", "size": 25, "font": {"size": 10}, "shape": "dot"},
+        // === API / DASHBOARD (Blue) ===
+        {id:"api_main", label:"api/main.py\n(FastAPI 12ep)", group:"api", color:"#4169E1", size:35, title:"REST API server (port 8000)\n12 endpoints: matches, stats, bankroll,\ncoupons, config, settings\nServes preview.html dashboard"},
+        {id:"dashboard_streamlit", label:"dashboard.py\n(STREAMLIT)", group:"api", color:"#4169E1", size:28, title:"Streamlit Dashboard MVP\nBankroll, coupon stats, AI feedback"},
+        {id:"dashboard_root", label:"dashboard.py (root)\n(LEGACY)", group:"api", color:"#4169E1", size:20, title:"Root dashboard.py\nPandas-based data loading"},
 
-            // === DATA FETCHING (Light Blue) ===
-            {"id": "results_updater", "label": "results_updater.py\n(RESULTS)", "color": "#6495ED", "title": "Update match results 48h\nAPI Football integration", "size": 30, "font": {"size": 12}, "shape": "dot"},
-            {"id": "data_fetcher", "label": "data_fetcher.py\n(FETCH)", "color": "#87CEEB", "title": "Historical data + fixtures\nAPI Football", "size": 28, "font": {"size": 11}, "shape": "dot"},
+        // === UTILS (Slate) ===
+        {id:"cache", label:"cache.py\n(CACHE)", group:"utils", color:"#778899", size:28, title:"3-layer cache system:\n1. RAM cache (Bzzoiro/FDB)\n2. Disk cache (API-Football)\n3. Budget tracking (100 req/day)\naf_cache_get/set, af_budget_use"},
+        {id:"helpers", label:"helpers.py\n(HELPERS)", group:"utils", color:"#778899", size:20, title:"_s (safe string), _parse_date"},
+        {id:"logging_mod", label:"logging.py\n(LOGGING)", group:"utils", color:"#778899", size:26, title:"Centralized logging module\nBezpiecznyHTTP, BezpiecznyCache,\nbezpieczna_funkcja, mierz_czas,\nraport_diagnostyczny"},
+        {id:"console", label:"console.py\n(CONSOLE)", group:"utils", color:"#778899", size:16, title:"Rich Console singleton\nWindows cp1250 fix"},
+        {id:"telegram", label:"telegram_notify.py\n(TELEGRAM)", group:"utils", color:"#778899", size:24, title:"Telegram notifications\nsend_kupon, send_draft_kupon,\nsend_wynik_update, send_message"},
+        {id:"normalize", label:"normalize.py\n(NORMALIZE)", group:"utils", color:"#778899", size:22, title:"Team name normalization\nnormalize_team_name, _strip_diacritics,\nteam_mappings.json"},
+        {id:"betting_utils", label:"betting.py\n(BETTING)", group:"utils", color:"#778899", size:20, title:"oblicz_tip_correct,\nnormalize_team_name (DUPLICATE!)"},
 
-            // === CONFIG (Gray) ===
-            {"id": "config", "label": "config.py\n(CONFIG)", "color": "#808080", "title": "Environment variables\nAPI keys, thresholds, DB path", "size": 28, "font": {"size": 11}, "shape": "dot"}
-        ];
+        // === DATABASE TABLES (Green) ===
+        {id:"db_main", label:"footstats_backtest.db\n(SQLite)", group:"db", color:"#228B22", size:36, title:"Main database — 6 tables"},
+        {id:"t_coupons", label:"coupons", group:"db", color:"#32CD32", size:28, title:"Kupony: DRAFT→ACTIVE→WIN/LOSE\nstatus, stake, odds, created_at"},
+        {id:"t_predictions", label:"predictions", group:"db", color:"#3CB371", size:26, title:"Predykcje + wyniki\nresult, xG, lambda, confidence"},
+        {id:"t_ai_feedback", label:"ai_feedback\n(RAG MEMORY)", group:"db", color:"#FF1493", size:34, title:"RAG Memory — 220+ lessons\nStored by post_match_analyzer\nEmbedded by rag_embeddings"},
+        {id:"t_embeddings", label:"ai_feedback_embeddings\n(VECTORS)", group:"db", color:"#FF1493", size:26, title:"384-dim float32 BLOB\nCosine similarity search"},
+        {id:"t_bankroll", label:"bankroll_state", group:"db", color:"#3CB371", size:22, title:"Kelly bankroll tracking\nbalance, tx_type, timestamp"},
+        {id:"t_settlement", label:"coupon_settlement", group:"db", color:"#3CB371", size:22, title:"Settlement audit log\nWIN/LOSE timestamps"},
 
-        // Edges data
-        var edgesData = [{"from": "daily_agent", "to": "analyzer", "title": "KROK 1: Send form + lessons \u2192 Groq LLM", "color": "#9370DB", "width": 4, "arrows": "to"}, {"from": "analyzer", "to": "coupons_db", "title": "KROK 2: Write generated coupon", "color": "#32CD32", "width": 3, "arrows": "to"}, {"from": "analyzer", "to": "ai_feedback_db", "title": "Read lessons (WNIOSKI Z OSTATNICH PORA\u017bEK)", "color": "#FF1493", "width": 3, "dashes": true, "arrows": "to"}, {"from": "post_match_analyzer", "to": "ai_feedback_db", "title": "ETAP 7: Write lesson from lost coupon", "color": "#FF1493", "width": 3, "arrows": "to"}, {"from": "daily_agent", "to": "post_match_analyzer", "title": "KROK 0b: Trigger after results update", "color": "#DA70D6", "width": 3, "arrows": "to"}, {"from": "evening_agent", "to": "coupons_db", "title": "Settlement: ACTIVE\u2192WIN/LOSE", "color": "#FFD700", "width": 3, "arrows": "to"}, {"from": "evening_agent", "to": "predictions_db", "title": "Read match results", "color": "#3CB371", "width": 2, "dashes": true, "arrows": "to"}, {"from": "results_updater", "to": "predictions_db", "title": "Populate match results", "color": "#6495ED", "width": 2, "arrows": "to"}, {"from": "coupons_db", "to": "db_main", "title": "Part of main database", "color": "#228B22", "width": 1, "dashes": true}, {"from": "predictions_db", "to": "db_main", "title": "Part of main database", "color": "#228B22", "width": 1, "dashes": true}, {"from": "ai_feedback_db", "to": "db_main", "title": "Part of main database", "color": "#228B22", "width": 2, "dashes": true}, {"from": "api_main", "to": "coupons_db", "title": "Read live coupon data", "color": "#4169E1", "width": 2, "dashes": true}, {"from": "api_main", "to": "preview", "title": "Serve HTML + JSON endpoints", "color": "#4169E1", "width": 2, "arrows": "to"}, {"from": "daily_agent", "to": "config", "title": "Read environment", "color": "#808080", "width": 1, "dashes": true}, {"from": "analyzer", "to": "config", "title": "Read API keys", "color": "#808080", "width": 1, "dashes": true}, {"from": "evening_agent", "to": "config", "title": "Read settings", "color": "#808080", "width": 1, "dashes": true}, {"from": "api_main", "to": "config", "title": "Read config", "color": "#808080", "width": 1, "dashes": true}, {"from": "daily_agent", "to": "calibration", "title": "Apply Kelly multiplier to stakes", "color": "#FF8C00", "width": 2, "arrows": "to"}, {"from": "calibration", "to": "kelly", "title": "Calculate stake", "color": "#FFA500", "width": 1, "arrows": "to"}, {"from": "backtest", "to": "calibration", "title": "Provide hit-rate thresholds", "color": "#FF7F50", "width": 1, "dashes": true}, {"from": "trainer", "to": "ai_feedback_db", "title": "Optional: Fine-tune from feedback", "color": "#DA70D6", "width": 1, "dashes": true}];
+        // === TESTS (Light Green) ===
+        {id:"tests", label:"tests/\n(29 test files)", group:"tests", color:"#8FBC8F", size:30, title:"pytest — 59 tests, ~40% coverage\ntest_ai_*, test_backtest_*, test_cache,\ntest_calibration, test_coupon_tracker,\ntest_daily_agent_faza, test_decision_score,\ntest_ensemble, test_evening_agent,\ntest_footstats, test_form_analysis,\ntest_helpers, test_kelly, test_lineup_scraper,\ntest_normalize, test_pattern_analyzer,\ntest_pdf_*, test_poisson, test_rag_embeddings,\ntest_referee_db, test_scrapers, test_telegram,\ntest_walkforward, test_weekly_report, test_xg_lambda"},
 
-        // Create vis network objects
-        var nodes = new vis.DataSet(nodesData);
-        var edges = new vis.DataSet(edgesData);
+        // === INFRA / CONFIG (Gray) ===
+        {id:"config", label:"config.py\n(CONFIG)", group:"infra", color:"#808080", size:28, title:"Environment variables + .env\nAPI keys, thresholds, DB path\n_wczytaj_lub_stworz_env, _czytaj_wszystkie_klucze"},
+        {id:"pyproject", label:"pyproject.toml", group:"infra", color:"#808080", size:20, title:"Project metadata, deps, build config"},
+        {id:"dockerfile", label:"Dockerfile", group:"infra", color:"#808080", size:18, title:"Docker deployment config"},
+        {id:"start_cloud", label:"start_cloud.sh", group:"infra", color:"#808080", size:16, title:"Cloud startup script"},
+        {id:"scripts", label:"scripts/\n(5 files)", group:"infra", color:"#808080", size:22, title:"Maintenance scripts:\nadd_logging.py, fix_logging_fstrings.py,\nrun_backtest.py, settle_coupons.py,\nsilent_run.vbs"},
+        {id:"czysc_baze", label:"czysc_baze.py", group:"infra", color:"#808080", size:18, title:"DB cleanup + migration"}
+    ];
 
-        var container = document.getElementById('mynetwork');
-        var data = {
-            nodes: nodes,
-            edges: edges
-        };
+    // ======= EDGES =======
+    var edgesData = [
+        // --- Orchestration flow ---
+        {from:"run_daily_bat", to:"scheduler", color:"#FFD700", width:2, arrows:"to", title:"@08:00 trigger"},
+        {from:"scheduler", to:"daily_agent", color:"#FFD700", width:4, arrows:"to", title:"draft → wait → final"},
+        {from:"daily_agent", to:"results_updater", color:"#6495ED", width:2, arrows:"to", title:"KROK 0: update results 48h"},
+        {from:"daily_agent", to:"post_match", color:"#BA55D3", width:3, arrows:"to", title:"KROK 0b: AI feedback"},
+        {from:"daily_agent", to:"referees", color:"#FF6347", width:2, arrows:"to", title:"KROK 0d: fetch referees"},
+        {from:"daily_agent", to:"bzzoiro", color:"#FF6347", width:3, arrows:"to", title:"KROK 1: ML predictions"},
+        {from:"daily_agent", to:"form_scraper", color:"#FF6347", width:2, arrows:"to", title:"KROK 1: forma/kontuzje"},
+        {from:"daily_agent", to:"analyzer", color:"#9370DB", width:4, arrows:"to", title:"Draft+Final: Groq analysis"},
+        {from:"daily_agent", to:"bet_builder", color:"#00CED1", width:2, arrows:"to", title:"BetBuilder suggestions"},
+        {from:"daily_agent", to:"coupon_tracker", color:"#00CED1", width:2, arrows:"to", title:"Save/promote coupons"},
+        {from:"daily_agent", to:"calibration", color:"#FF8C00", width:2, arrows:"to", title:"Kelly multiplier"},
+        {from:"daily_agent", to:"telegram", color:"#778899", width:2, arrows:"to", title:"Send notifications"},
+        {from:"daily_agent", to:"lineup_scraper", color:"#FF6347", width:1, arrows:"to", dashes:true, title:"Final phase: lineups"},
+        {from:"daily_agent", to:"coupon_settlement", color:"#00CED1", width:2, arrows:"to", title:"KROK 0: settle active"},
 
-        var options = {
-            physics: {
-                enabled: true,
-                barnesHut: {
-                    gravitationalConstant: -28000,
-                    centralGravity: 0.3,
-                    springLength: 250,
-                    springConstant: 0.04
-                },
-                maxVelocity: 50,
-                minVelocity: 0.75,
-                solver: 'barnesHut',
-                timestep: 0.5,
-                stabilization: {iterations: 150}
+        // --- Evening agent ---
+        {from:"evening_agent", to:"api_football", color:"#FF6347", width:2, arrows:"to", title:"Fetch today results"},
+        {from:"evening_agent", to:"t_coupons", color:"#32CD32", width:3, arrows:"to", title:"ACTIVE→WIN/LOSE"},
+        {from:"evening_agent", to:"bankroll", color:"#00CED1", width:2, arrows:"to", title:"Update bankroll"},
+        {from:"evening_agent", to:"telegram", color:"#778899", width:1, arrows:"to", title:"Summary notification"},
+
+        // --- AI pipeline ---
+        {from:"analyzer", to:"ai_client", color:"#BA55D3", width:2, arrows:"to", title:"Groq/Ollama calls"},
+        {from:"analyzer", to:"rag", color:"#FF1493", width:3, arrows:"to", dashes:true, title:"Inject RAG context"},
+        {from:"analyzer", to:"t_ai_feedback", color:"#FF1493", width:2, dashes:true, arrows:"to", title:"Read: WNIOSKI Z PORAŻEK"},
+        {from:"analyzer", to:"backtest", color:"#FF8C00", width:1, arrows:"to", title:"Auto-save predictions"},
+        {from:"post_match", to:"t_ai_feedback", color:"#FF1493", width:3, arrows:"to", title:"Write lessons from losses"},
+        {from:"rag", to:"rag_embed", color:"#FF1493", width:3, arrows:"to", title:"Semantic retrieval"},
+        {from:"rag_embed", to:"t_embeddings", color:"#FF1493", width:3, arrows:"to", title:"Read/write vectors"},
+        {from:"rag_embed", to:"t_ai_feedback", color:"#FF1493", width:2, arrows:"to", title:"Backfill from lessons"},
+        {from:"trainer", to:"t_ai_feedback", color:"#DA70D6", width:1, dashes:true, arrows:"to", title:"Fine-tune from feedback"},
+        {from:"trainer", to:"pattern_analyzer", color:"#00CED1", width:1, dashes:true, arrows:"to", title:"Load patterns"},
+
+        // --- Core logic links ---
+        {from:"calibration", to:"kelly", color:"#FF8C00", width:1, arrows:"to"},
+        {from:"calibration", to:"t_coupons", color:"#FF8C00", width:1, dashes:true, arrows:"to", title:"Read last 10 statuses"},
+        {from:"backtest_engine", to:"analyzer", color:"#9370DB", width:2, arrows:"to", title:"Run AI analysis"},
+        {from:"backtest_engine", to:"api_football", color:"#FF6347", width:1, arrows:"to"},
+        {from:"backtest_engine", to:"t_ai_feedback", color:"#FF1493", width:2, arrows:"to", title:"Save RAG feedback"},
+        {from:"coupon_settlement", to:"flashscore_results", color:"#FF6347", width:1, dashes:true, arrows:"to", title:"Fallback results"},
+        {from:"coupon_settlement", to:"t_ai_feedback", color:"#FF1493", width:2, arrows:"to", title:"Send to RAG"},
+        {from:"coupon_settlement", to:"bankroll", color:"#00CED1", width:1, arrows:"to"},
+        {from:"coupon_tracker", to:"t_coupons", color:"#32CD32", width:2, arrows:"to"},
+        {from:"backtest", to:"t_predictions", color:"#3CB371", width:2, arrows:"to"},
+        {from:"ensemble", to:"poisson", color:"#00CED1", width:1, arrows:"to"},
+        {from:"ensemble", to:"bzzoiro", color:"#FF6347", width:1, dashes:true, arrows:"to"},
+        {from:"bet_builder", to:"poisson", color:"#00CED1", width:1, arrows:"to", title:"Dixon-Coles model"},
+        {from:"decision_score", to:"kelly", color:"#00CED1", width:1, arrows:"to"},
+        {from:"quick_picks", to:"bzzoiro", color:"#FF6347", width:2, arrows:"to"},
+        {from:"quick_picks", to:"analyzer", color:"#9370DB", width:2, arrows:"to"},
+        {from:"weekly_picks", to:"bzzoiro", color:"#FF6347", width:2, arrows:"to"},
+        {from:"walkforward", to:"poisson", color:"#00CED1", width:1, arrows:"to"},
+
+        // --- Scraper dependencies ---
+        {from:"results_updater", to:"api_football", color:"#FF6347", width:2, arrows:"to"},
+        {from:"results_updater", to:"flashscore_results", color:"#FF6347", width:1, dashes:true, arrows:"to"},
+        {from:"results_updater", to:"t_predictions", color:"#3CB371", width:2, arrows:"to"},
+        {from:"referees", to:"referee_db", color:"#FF6347", width:2, arrows:"to"},
+        {from:"enriched", to:"api_football", color:"#FF6347", width:1, dashes:true, arrows:"to"},
+        {from:"enriched", to:"bzzoiro", color:"#FF6347", width:1, dashes:true, arrows:"to"},
+
+        // --- API/Dashboard ---
+        {from:"api_main", to:"t_coupons", color:"#4169E1", width:2, dashes:true, arrows:"to"},
+        {from:"api_main", to:"t_predictions", color:"#4169E1", width:1, dashes:true, arrows:"to"},
+        {from:"api_main", to:"t_bankroll", color:"#4169E1", width:1, dashes:true, arrows:"to"},
+        {from:"dashboard_streamlit", to:"db_main", color:"#4169E1", width:2, dashes:true, arrows:"to"},
+
+        // --- Database structure ---
+        {from:"t_coupons", to:"db_main", color:"#228B22", width:1, dashes:true},
+        {from:"t_predictions", to:"db_main", color:"#228B22", width:1, dashes:true},
+        {from:"t_ai_feedback", to:"db_main", color:"#228B22", width:1, dashes:true},
+        {from:"t_embeddings", to:"db_main", color:"#228B22", width:1, dashes:true},
+        {from:"t_bankroll", to:"db_main", color:"#228B22", width:1, dashes:true},
+        {from:"t_settlement", to:"db_main", color:"#228B22", width:1, dashes:true},
+
+        // --- Utils usage (sparse, key ones) ---
+        {from:"daily_agent", to:"config", color:"#808080", width:1, dashes:true},
+        {from:"analyzer", to:"config", color:"#808080", width:1, dashes:true},
+        {from:"api_football", to:"cache", color:"#778899", width:1, dashes:true, title:"Disk cache layer"},
+        {from:"bzzoiro", to:"cache", color:"#778899", width:1, dashes:true, title:"RAM cache layer"},
+        {from:"weekly_report", to:"telegram", color:"#778899", width:1, arrows:"to", title:"Send report"},
+
+        // --- CLI ---
+        {from:"cli", to:"analyzer", color:"#9370DB", width:2, arrows:"to"},
+        {from:"cli", to:"weekly_picks", color:"#00CED1", width:1, arrows:"to"},
+        {from:"cli", to:"data_fetcher", color:"#6495ED", width:1, arrows:"to"},
+
+        // --- Tests ---
+        {from:"tests", to:"poisson", color:"#8FBC8F", width:1, dashes:true},
+        {from:"tests", to:"kelly", color:"#8FBC8F", width:1, dashes:true},
+        {from:"tests", to:"rag_embed", color:"#8FBC8F", width:1, dashes:true},
+        {from:"tests", to:"coupon_tracker", color:"#8FBC8F", width:1, dashes:true}
+    ];
+
+    var nodes = new vis.DataSet(nodesData);
+    var edges = new vis.DataSet(edgesData);
+    var allNodes = nodesData;
+    var allEdges = edgesData;
+
+    var container = document.getElementById('mynetwork');
+    var network = new vis.Network(container, {nodes: nodes, edges: edges}, {
+        physics: {
+            enabled: true,
+            barnesHut: {
+                gravitationalConstant: -35000,
+                centralGravity: 0.25,
+                springLength: 220,
+                springConstant: 0.035
             },
-            interaction: {
-                hover: true,
-                navigationButtons: true,
-                keyboard: true,
-                zoomView: true,
-                dragView: true
-            },
-            nodes: {
-                font: {
-                    color: '#e0e0e0',
-                    size: 14,
-                    face: 'Arial'
-                },
-                borderWidth: 2,
-                borderWidthSelected: 3,
-                shadow: {
-                    enabled: true,
-                    color: 'rgba(0, 0, 0, 0.5)',
-                    size: 10,
-                    x: 5,
-                    y: 5
-                }
-            },
-            edges: {
-                color: {inherit: 'from'},
-                font: {
-                    color: '#a0a0a0',
-                    size: 11,
-                    align: 'middle'
-                },
-                smooth: {
-                    type: 'continuous',
-                    forceDirection: 'none'
-                },
-                arrows: {
-                    to: {enabled: true, scaleFactor: 0.3}
-                },
-                shadow: {
-                    enabled: false
-                }
+            maxVelocity: 50, minVelocity: 0.75,
+            solver: 'barnesHut', timestep: 0.5,
+            stabilization: {iterations: 200}
+        },
+        interaction: {
+            hover: true, navigationButtons: true,
+            keyboard: true, zoomView: true, dragView: true,
+            tooltipDelay: 100
+        },
+        nodes: {
+            shape: "dot",
+            font: {color:'#e0e0e0', size:12, face:'Segoe UI'},
+            borderWidth: 2, borderWidthSelected: 3,
+            shadow: {enabled:true, color:'rgba(0,0,0,0.4)', size:8, x:3, y:3}
+        },
+        edges: {
+            font: {color:'#a0a0a0', size:10, align:'middle'},
+            smooth: {type:'continuous', forceDirection:'none'},
+            arrows: {to:{enabled:true, scaleFactor:0.3}},
+            shadow: false
+        }
+    });
+
+    // Stats line
+    document.getElementById('stats-line').textContent =
+        'Nodes: ' + nodesData.length + ' | Edges: ' + edgesData.length +
+        ' | Python files: 63 | Tests: 29 | DB tables: 6';
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+            btn.classList.add('active');
+            var group = btn.dataset.group;
+
+            if (group === 'all') {
+                nodes.clear(); nodes.add(allNodes);
+                edges.clear(); edges.add(allEdges);
+            } else {
+                var visibleIds = new Set();
+                var filteredNodes = allNodes.filter(function(n) {
+                    if (n.group === group) { visibleIds.add(n.id); return true; }
+                    return false;
+                });
+                var filteredEdges = allEdges.filter(function(e) {
+                    return visibleIds.has(e.from) && visibleIds.has(e.to);
+                });
+                nodes.clear(); nodes.add(filteredNodes);
+                edges.clear(); edges.add(filteredEdges);
             }
-        };
+            network.fit();
+        });
+    });
 
-        // Create the network
-        var network = new vis.Network(container, data, options);
-
-        // Fit the network to the window on load
-        network.fit();
-
-        // Log debug info
-        console.log('Network loaded. Nodes: ' + nodes.length + ', Edges: ' + edges.length);
+    network.fit();
     </script>
 </body>
 </html>

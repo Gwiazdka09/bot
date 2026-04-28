@@ -167,6 +167,42 @@ def normalize_team_name(name: str, use_mappings: bool = True) -> str:
     return result
 
 
+def _norm_ascii(s: str) -> str:
+    """Normalizuje tekst: Unicode → ASCII, lowercase, tylko alfanumeryczne."""
+    s = str(s)
+    s = unicodedata.normalize("NFKD", s)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
+
+
+def team_similarity(a: str, b: str) -> float:
+    """
+    Podobieństwo nazw drużyn 0–1.
+    Obsługuje skróty (PSG = Paris Saint-Germain) i warianty (Lyon ~ Lyonnais).
+    """
+    from difflib import SequenceMatcher
+
+    na, nb = normalize_team_name(a), normalize_team_name(b)
+
+    if na == nb:
+        return 1.0
+
+    def _initials(s: str) -> str:
+        return "".join(w[0] for w in s.split() if w)
+
+    if na == _initials(nb) or nb == _initials(na):
+        return 0.85
+
+    tokens_a = na.split()
+    tokens_b = nb.split()
+    if all(any(tb.startswith(ta) for tb in tokens_b) for ta in tokens_a if len(ta) >= 3):
+        return 0.80
+    if all(any(ta.startswith(tb) for ta in tokens_a) for tb in tokens_b if len(tb) >= 3):
+        return 0.80
+
+    return SequenceMatcher(None, na, nb).ratio()
+
+
 def reload_mappings() -> None:
     """Wyczyść cache mappingów (przydatne po edycji team_mappings.json)."""
     _load_mappings.cache_clear()

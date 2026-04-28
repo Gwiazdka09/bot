@@ -37,62 +37,24 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
+from footstats.scrapers.base_playwright import (
+    SUPEROFERTA_CONFIG as _CFG,
+    zamknij_popup as _zamknij_popup_base,
+    zaloguj as _zaloguj_base,
+    zapisz_cache as _zapisz_cache_base,
+)
+
 STS_URL   = "https://www.sts.pl"
 CACHE_DIR = Path("cache/superoferta")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# ── Helpers (delegated to base_playwright) ────────────────────────────
 
 def _zamknij_popup(page) -> None:
-    for sel in [
-        "button#onetrust-accept-btn-handler",
-        "[aria-label='Zamknij']",
-        "button:has-text('Akceptuję')",
-    ]:
-        try:
-            page.click(sel, timeout=1500)
-            time.sleep(0.3)
-            return
-        except Exception:
-            pass
-
+    _zamknij_popup_base(page, _CFG)
 
 def _zaloguj(page) -> bool:
-    login = os.getenv("STS_LOGIN", "").strip()
-    haslo = os.getenv("STS_HASLO", "").strip()
-    if not login or not haslo:
-        return False
-    try:
-        try:
-            page.click(
-                "button:has-text('Zaloguj się'), a:has-text('Zaloguj się')",
-                timeout=3000,
-            )
-            time.sleep(1.5)
-        except Exception:
-            pass
-        try:
-            page.wait_for_selector(
-                "input[type='email'], input[placeholder*='e-mail']", timeout=5000
-            )
-        except PWTimeout:
-            return False
-
-        page.fill(
-            "input[type='email'], input[placeholder*='e-mail'], "
-            "input[placeholder*='E-mail']",
-            login,
-        )
-        time.sleep(0.3)
-        page.fill("input[type='password'], input[placeholder*='Hasło']", haslo)
-        time.sleep(0.3)
-        page.click("button:has-text('Zaloguj się')", timeout=5000)
-        time.sleep(3)
-        logger.info("[STS] Zalogowano")
-        return True
-    except Exception as e:
-        logger.info(f"[STS] Logowanie nieudane: {e}")
-        return False
+    return _zaloguj_base(page, _CFG)
 
 
 def _parsuj_kurs(tekst: str) -> float | None:

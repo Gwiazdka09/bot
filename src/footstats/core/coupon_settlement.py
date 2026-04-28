@@ -18,7 +18,8 @@ from pathlib import Path
 
 log = logging.getLogger(__name__)
 
-from footstats.utils.betting import oblicz_tip_correct, normalize_team_name
+from footstats.utils.betting import oblicz_tip_correct
+from footstats.utils.normalize import normalize_team_name
 
 
 def _get_fixtures_api(api_key: str, date_str: str) -> list[dict]:

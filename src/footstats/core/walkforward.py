@@ -22,17 +22,13 @@ import numpy as np
 import pandas as pd
 
 from footstats.config import DB_PATH
+from footstats.utils.db import connect as _connect
 MIN_HIST = 5   # min meczów drużyny w historii żeby liczyć lambdę
 
 
 # ── DB ────────────────────────────────────────────────────────────────────
 
-def _connect() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+# _connect imported from footstats.utils.db
 
 
 def _init_wf_table() -> None:

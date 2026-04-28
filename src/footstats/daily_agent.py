@@ -21,6 +21,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
+from footstats.utils.normalize import normalize_team_name
+
 console = Console()
 
 LOGS_DIR = Path(__file__).parent.parent.parent / "logs"
@@ -38,9 +40,7 @@ def _blad(msg: str):
     sys.exit(1)
 
 
-def _norm(name: str) -> str:
-    """Normalizacja nazwy drużyny do porównań: lowercase, bez znaków specjalnych."""
-    return name.lower().replace(".", "").replace("-", " ").replace("  ", " ").strip()
+_norm = normalize_team_name
 
 
 # ── Krok 1: Bzzoiro ───────────────────────────────────────────────────────────
@@ -82,6 +82,46 @@ def _pobierz_kandydatow(dni: int = 2) -> tuple[list, dict]:
         }
 
     return wyniki, indeks
+
+
+# ── Krok 3b: Live odds refresh (faza final) ──────────────────────────────────
+
+def _odswiez_kursy_live(indeks: dict, dni: int = 3) -> dict:
+    """Re-fetch Bzzoiro odds and update indeks with fresh data."""
+    from footstats.scrapers.bzzoiro import BzzoiroClient, ENV_BZZOIRO
+    from footstats.core.quick_picks import szybkie_pewniaczki_2dni
+    from footstats.config import AGENT_KANDYDAT_PROG
+
+    klucz = os.getenv(ENV_BZZOIRO, "")
+    if not klucz:
+        console.print("[yellow]Brak BZZOIRO_API_KEY — pomijam odświeżenie kursów[/yellow]")
+        return indeks
+
+    try:
+        c = BzzoiroClient(klucz)
+        ok, msg = c.waliduj()
+        if not ok:
+            console.print(f"[yellow]Bzzoiro niedostępny: {msg} — używam starych kursów[/yellow]")
+            return indeks
+
+        fresh = szybkie_pewniaczki_2dni(c, prog=AGENT_KANDYDAT_PROG, godziny=dni * 24)
+        updated = 0
+        for w in fresh:
+            g = w.get("gospodarz", "")
+            a = w.get("goscie", "")
+            key = (_norm(g), _norm(a))
+            if key in indeks:
+                old_odds = indeks[key].get("odds", {})
+                new_odds = w.get("odds", {})
+                if new_odds and new_odds != old_odds:
+                    indeks[key]["odds"] = new_odds
+                    updated += 1
+
+        console.print(f"[green]Odświeżono kursy LIVE: {updated}/{len(indeks)} meczów zaktualizowanych[/green]")
+    except Exception as e:
+        console.print(f"[yellow]Błąd odświeżenia kursów: {e} — używam starych kursów[/yellow]")
+
+    return indeks
 
 
 # ── Krok 2: Forma SofaScore ───────────────────────────────────────────────────
@@ -655,6 +695,10 @@ def main():
 
     _sep("KROK 3 — Groq AI")
     dane = _analizuj_groq(wyniki, cel_wygrana_a=args.cel_a, cel_wygrana_b=args.cel_b, stawka=args.stawka)
+
+    if args.faza == "final":
+        _sep("KROK 3b — Odświeżenie kursów LIVE (faza final)")
+        indeks = _odswiez_kursy_live(indeks, dni=args.dni)
 
     _sep("KROK 4 — Weryfikacja kursow (anty-halucynacja)")
     dane = _weryfikuj_kupony(dane, indeks)

@@ -13,10 +13,9 @@ import re
 import sys
 import argparse
 from datetime import datetime
-from difflib import SequenceMatcher
 from pathlib import Path
 
-from footstats.utils.normalize import normalize_team_name
+from footstats.utils.normalize import normalize_team_name, team_similarity
 
 import requests
 from dotenv import load_dotenv
@@ -41,43 +40,8 @@ API_BASE = "https://v3.football.api-sports.io"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _norm(s: str) -> str:
-    """
-    Normalizuje nazwę drużyny dla fuzzy-matchingu.
-    Deleguje do normalize_team_name: usuwa prefiksy (FC, KS, TSG, al-...),
-    diakrytyki, znaki specjalne i stosuje mappingi z data/team_mappings.json.
-    """
-    return normalize_team_name(s)
-
-
-def _similar(a: str, b: str) -> float:
-    """
-    Podobieństwo nazw drużyn 0–1.
-    Obsługuje skróty (PSG = Paris Saint-Germain) i warianty (Lyon ~ Lyonnais).
-    """
-    na, nb = _norm(a), _norm(b)
-
-    # 1. Dokładne dopasowanie
-    if na == nb:
-        return 1.0
-
-    # 2. Sprawdź czy jedna jest akronimem drugiej (PSG → Paris Saint-Germain)
-    def _initials(s: str) -> str:
-        return "".join(w[0] for w in s.split() if w)
-
-    if na == _initials(nb) or nb == _initials(na):
-        return 0.85
-
-    # 3. Sprawdź czy tokeny z a są prefiksem tokenów w b (Lyon → Lyonnais)
-    tokens_a = na.split()
-    tokens_b = nb.split()
-    if all(any(tb.startswith(ta) for tb in tokens_b) for ta in tokens_a if len(ta) >= 3):
-        return 0.80
-    if all(any(ta.startswith(tb) for ta in tokens_a) for tb in tokens_b if len(tb) >= 3):
-        return 0.80
-
-    # 4. SequenceMatcher fallback
-    return SequenceMatcher(None, na, nb).ratio()
+_norm = normalize_team_name
+_similar = team_similarity
 
 
 def _wynik_z_fixture(fixture: dict) -> tuple[str, str, str] | None:

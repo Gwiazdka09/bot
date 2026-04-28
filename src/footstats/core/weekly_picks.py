@@ -75,75 +75,7 @@ def _typy_pewne(pw: float, pr: float, pp: float,
     return wynik
 
 
-# ── Pomocnicze: predykcja ML Bzzoiro → format standardowy ─────
-
-def _bzz_parse_prob(pred_ml: dict) -> tuple:
-    """
-    Uniwersalny parser Bzzoiro – WSZYSTKIE znane formaty API sports.bzzoiro.com.
-
-    Zbadane formaty:
-      Format A: {percent: {home:"55%", draw:"25%", away:"20%"}}  <- GLOWNY
-      Format B: {home_win_prob:0.55, draw_prob:0.25, away_win_prob:0.20}
-      Format C: {home:55, draw:25, away:20}
-      Format D: zagniezdzone {predictions:{...}} lub {prediction:{...}}
-
-    Zwraca (pw, pr, pp, bt, o25) jako procenty 0-100 lub None.
-    """
-    if not pred_ml or not isinstance(pred_ml, dict):
-        return None
-
-    def p(v):
-        if v is None:
-            return 0.0
-        try:
-            f = float(str(v).strip().rstrip('%'))
-            # UWAGA: granica 1.0 jest niejednoznaczna.
-            # Uzywamy SCISLEGO < 1.0 zamiast <= 1.0:
-            #   0.55 → ulamek → *100 = 55.0  ✓
-            #   1.0  → procent → 1.0          ✓ (1% to rzadkie ale poprawne)
-            #   55.0 → procent → 55.0         ✓
-            return f * 100 if 0 < f < 1.0 else f
-        except (ValueError, TypeError):
-            return 0.0
-
-    def norm(pw, pr, pp, bt=0.0, o25=0.0):
-        s = pw + pr + pp or 100.0
-        return (round(pw/s*100, 1), round(pr/s*100, 1),
-                round(100 - pw/s*100 - pr/s*100, 1),
-                round(min(max(bt, 0), 100), 1),
-                round(min(max(o25, 0), 100), 1))
-
-    # Format A: percent.home/draw/away (glowny format Bzzoiro)
-    pct = pred_ml.get("percent") or pred_ml.get("percentages")
-    if isinstance(pct, dict):
-        pw, pr, pp = p(pct.get("home")), p(pct.get("draw")), p(pct.get("away"))
-        if pw + pr + pp > 5:
-            bt  = p(pct.get("btts") or pred_ml.get("btts", 0))
-            o25 = p(pct.get("over_2_5") or pred_ml.get("over_2_5", 0))
-            return norm(pw, pr, pp, bt, o25)
-
-    # Format B: home_win_prob / draw_prob / away_win_prob
-    if "home_win_prob" in pred_ml:
-        pw = p(pred_ml.get("home_win_prob"))
-        pr = p(pred_ml.get("draw_prob"))
-        pp = p(pred_ml.get("away_win_prob"))
-        if pw + pr + pp > 5:
-            return norm(pw, pr, pp,
-                        p(pred_ml.get("btts", 0)),
-                        p(pred_ml.get("over_2_5", 0)))
-
-    # Format C: home/draw/away bezposrednio
-    if all(k in pred_ml for k in ("home", "draw", "away")):
-        pw, pr, pp = p(pred_ml["home"]), p(pred_ml["draw"]), p(pred_ml["away"])
-        if pw + pr + pp > 5:
-            return norm(pw, pr, pp)
-
-    # Format D: zagniezdzone predictions/prediction
-    nested = pred_ml.get("predictions") or pred_ml.get("prediction")
-    if isinstance(nested, dict):
-        return _bzz_parse_prob(nested)
-
-    return None
+# _bzz_parse_prob imported from footstats.scrapers.bzzoiro (line 23)
 
 
 def _ml_do_predykcji(pred_ml: dict | None, odds: dict | None = None) -> dict | None:

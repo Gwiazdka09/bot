@@ -7,13 +7,11 @@ import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
 from footstats.config import AGENT_BANKROLL, AGENT_KELLY_FRACTION, DB_PATH
+from footstats.utils.db import connect as _db_connect
 
 
 def _connect() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _db_connect(wal=False, foreign_keys=False)
 
 def init_bankroll_tables() -> None:
     """Tworzy tabele do śledzenia stanu i historii bankrolla."""

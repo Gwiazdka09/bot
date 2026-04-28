@@ -13,6 +13,7 @@ Użycie:
 import json
 import sqlite3
 from footstats.config import DB_PATH
+from footstats.utils.db import connect as _connect
 
 # Statusy kuponu
 STATUS_DRAFT   = "DRAFT"
@@ -26,13 +27,7 @@ ACTIVE_STATUSES = (STATUS_DRAFT, STATUS_ACTIVE)
 VALID_STATUSES = {STATUS_DRAFT, STATUS_ACTIVE, STATUS_WON, STATUS_LOST, STATUS_PARTIAL, STATUS_VOID}
 
 
-def _connect() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA foreign_keys=ON")
-    return conn
+# _connect imported from footstats.utils.db
 
 
 def _exec(fn):

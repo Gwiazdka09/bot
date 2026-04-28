@@ -16,10 +16,10 @@ import re
 import sys
 import time
 import logging
-import unicodedata
 from datetime import datetime, timedelta
-from difflib import SequenceMatcher
 from dotenv import load_dotenv
+
+from footstats.utils.normalize import _norm_ascii, team_similarity
 
 import requests
 
@@ -83,16 +83,8 @@ def _get_api_key() -> str | None:
     return (os.getenv(API_KEY_ENV) or "").strip() or None
 
 
-def _norm(s: str) -> str:
-    """Normalizuje tekst: Unicode → ASCII, lowercase, tylko alfanumeryczne."""
-    s = unicodedata.normalize("NFKD", s)
-    s = s.encode("ascii", "ignore").decode("ascii")
-    return re.sub(r"[^a-z0-9 ]", "", s.lower()).strip()
-
-
-def _similar(a: str, b: str) -> float:
-    """Podobieństwo nazw (0–1). Obsługuje akcenty i skróty."""
-    return SequenceMatcher(None, _norm(a), _norm(b)).ratio()
+_norm = _norm_ascii
+_similar = team_similarity
 
 
 def _liga_ids_dla_nazwy(league_str: str) -> list[int]:

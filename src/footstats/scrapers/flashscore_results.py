@@ -9,9 +9,7 @@ import requests
 from datetime import datetime, timedelta
 from pathlib import Path
 from bs4 import BeautifulSoup
-from difflib import SequenceMatcher
-
-from footstats.utils.normalize import normalize_team_name
+from footstats.utils.normalize import normalize_team_name, team_similarity
 
 log = logging.getLogger(__name__)
 
@@ -19,9 +17,7 @@ log = logging.getLogger(__name__)
 FLASHSCORE_MOBI_URL = "https://www.flashscore.mobi"
 CACHE_DIR = Path(__file__).parent.parent.parent / "cache" / "flashscore"
 
-def _similar(a: str, b: str) -> float:
-    """Podobieństwo dwóch znormalizowanych nazw."""
-    return SequenceMatcher(None, normalize_team_name(a), normalize_team_name(b)).ratio()
+_similar = team_similarity
 
 def get_match_result(
     home_team: str,

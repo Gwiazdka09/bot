@@ -33,86 +33,27 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 
+from footstats.scrapers.base_playwright import (
+    STS_CONFIG as _CFG,
+    zamknij_popup as _zamknij_popup_base,
+    zaloguj as _zaloguj_base,
+    zapisz_cache as _zapisz_cache_base,
+)
+
 STS_URL   = "https://www.sts.pl"
 CACHE_DIR = Path("cache/sts")
 
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# ── Helpers (delegated to base_playwright) ────────────────────────────
 
 def _zamknij_popup(page) -> None:
-    for sel in [
-        "button#onetrust-accept-btn-handler",
-        "[aria-label='Zamknij']",
-        "button.close",
-    ]:
-        try:
-            page.click(sel, timeout=2000)
-            time.sleep(0.3)
-            return
-        except Exception:
-            pass
-
+    _zamknij_popup_base(page, _CFG)
 
 def _zapisz_cache(dane: list, nazwa: str = "kupony") -> Path:
-    CACHE_DIR.mkdir(exist_ok=True)
-    sciezka = CACHE_DIR / f"{nazwa}_{datetime.now().strftime('%Y%m%d_%H%M')}.json"
-    sciezka.write_text(json.dumps(dane, ensure_ascii=False, indent=2), encoding="utf-8")
-    return sciezka
-
-
-# ── Logowanie ─────────────────────────────────────────────────────────
+    return _zapisz_cache_base(dane, _CFG, nazwa)
 
 def zaloguj(page) -> bool:
-    login = os.getenv("STS_LOGIN", "").strip()
-    haslo = os.getenv("STS_HASLO", "").strip()
-
-    if not login or not haslo:
-        logger.info("[STS] Brak STS_LOGIN lub STS_HASLO w .env")
-        return False
-
-    try:
-        # Czekaj na modal logowania lub kliknij przycisk logowania
-        try:
-            page.wait_for_selector("input[type='email'], input[placeholder*='e-mail']",
-                                   timeout=3000)
-        except PWTimeout:
-            # Modal nie pojawił się — kliknij "Zaloguj się"
-            try:
-                page.click("button:has-text('Zaloguj się'), a:has-text('Zaloguj się')",
-                           timeout=3000)
-                time.sleep(1.5)
-            except Exception:
-                pass
-
-        # Wpisz email
-        page.fill("input[type='email'], input[placeholder*='e-mail'], input[placeholder*='E-mail']",
-                  login)
-        time.sleep(0.3)
-
-        # Wpisz hasło
-        page.fill("input[type='password'], input[placeholder*='Hasło']", haslo)
-        time.sleep(0.3)
-
-        # Kliknij Zaloguj się
-        page.click("button:has-text('Zaloguj się')", timeout=5000)
-        time.sleep(3)
-
-        # Sprawdź czy zalogowany (zniknie przycisk "Zaloguj się" lub pojawi się avatar)
-        try:
-            page.wait_for_selector("button:has-text('Zaloguj się')", state="hidden", timeout=5000)
-            logger.info("[STS] Zalogowano pomyślnie")
-            return True
-        except PWTimeout:
-            # Sprawdź inaczej
-            if page.query_selector("[data-cy='user-avatar'], .user-avatar, .profile-icon"):
-                logger.info("[STS] Zalogowano pomyślnie")
-                return True
-            logger.info("[STS] Logowanie mogło się nie udać — kontynuuję")
-            return True  # Próbuj dalej
-
-    except Exception as e:
-        logger.info(f"[STS] Błąd logowania: {e}")
-        return False
+    return _zaloguj_base(page, _CFG)
 
 
 # ── Pobieranie typerów ────────────────────────────────────────────────
