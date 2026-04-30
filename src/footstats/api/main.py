@@ -45,6 +45,10 @@ app.include_router(bankroll_router)
 app.include_router(settings_router)
 app.include_router(coupons_router)
 
+from fastapi_mcp import FastApiMCP as _FastApiMCP
+
+_mcp = _FastApiMCP(app)
+_mcp.mount_http()
 
 _dist = Path(__file__).parent.parent / "gui" / "dist"
 
