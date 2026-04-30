@@ -181,7 +181,16 @@ def settle_active_coupons(
                             (new_status, payout, roi, coupon_id),
                         )
                         print(f"[DB] Kupon #{coupon_id} updated: status={new_status} | payout={payout} | roi={roi}")
-                    _send_to_rag_feedback(coupon_id, legs, f"Leg #{leg_idx + 1} przegrany", verbose=verbose)
+                    lost_leg = legs[leg_idx]
+                    lost_reason = (
+                        f"PRZEGRANY kupon AKO ({len(legs)} legów). "
+                        f"Leg #{leg_idx + 1}: {lost_leg.get('home', '?')} vs {lost_leg.get('away', '?')} "
+                        f"({lost_leg.get('liga', lost_leg.get('league', '?'))}). "
+                        f"Tip: {lost_leg.get('tip', '?')} @ {lost_leg.get('odds', lost_leg.get('kurs', '?'))}. "
+                        f"Wynik: {lost_leg.get('result', '?')}. "
+                        f"Score AI: {lost_leg.get('decision_score', '?')}/100."
+                    )
+                    _send_to_rag_feedback(coupon_id, legs, lost_reason, verbose=verbose)
                     stats["settled"] += 1
                 except Exception as e:
                     log.error("Błąd rozliczania kuponu ID=%s: %s", coupon_id, e)
@@ -242,7 +251,22 @@ def settle_active_coupons(
 
                     # Dla LOSE: wyślij do RAG feedback
                     if not all_correct:
-                        _send_to_rag_feedback(coupon_id, legs, wynik, verbose=verbose)
+                        failed = [
+                            (i, lg) for i, (lg, r) in enumerate(zip(legs, leg_results)) if r == 0
+                        ]
+                        parts = []
+                        for i, lg in failed:
+                            parts.append(
+                                f"Leg #{i+1}: {lg.get('home','?')} vs {lg.get('away','?')} "
+                                f"({lg.get('liga', lg.get('league','?'))}), "
+                                f"Tip: {lg.get('tip','?')} @ {lg.get('odds', lg.get('kurs','?'))}, "
+                                f"Wynik: {lg.get('result','?')}, Score: {lg.get('decision_score','?')}/100"
+                            )
+                        lose_reason = (
+                            f"PRZEGRANY kupon ({len(legs)} legów, {len(failed)} chybionych). "
+                            + "; ".join(parts)
+                        )
+                        _send_to_rag_feedback(coupon_id, legs, lose_reason, verbose=verbose)
 
                 stats["settled"] += 1
             except Exception as e:

@@ -390,7 +390,7 @@ def _flush_langfuse():
 def backtest_period(
     days_back: int = 7,
     stawka: float = 5.0,
-    batch_size: int = 5,
+    batch_size: int = 3,
     dry_run: bool = False,
 ) -> dict:
     """
@@ -399,7 +399,7 @@ def backtest_period(
     Args:
         days_back: ile dni wstecz (domyślnie 7)
         stawka: stawka PLN na zakład (domyślnie 5)
-        batch_size: ile meczów w jednym batchu do Groq (domyślnie 10)
+        batch_size: ile meczów w jednym batchu do Groq (domyślnie 3)
         dry_run: jeśli True — nie zapisuje do DB, tylko wyświetla
 
     Returns:

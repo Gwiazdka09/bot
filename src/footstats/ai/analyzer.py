@@ -1247,7 +1247,7 @@ REGUŁY SCEPTYCYZMU:
         prompt = f"{prompt}{rag_similar}"
 
     # Langfuse observability is handled globally
-    tekst = _zapytaj_typera(prompt, max_tokens=1400)
+    tekst = _zapytaj_typera(prompt, max_tokens=2500)
     dane = _wyciagnij_json(tekst)
     if "top3" not in dane:
         dane["_raw"] = tekst
