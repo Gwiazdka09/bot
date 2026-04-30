@@ -4,6 +4,17 @@ import pytest
 from datetime import datetime, timedelta
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Reset slowapi in-memory limiter before each test to prevent cross-test contamination."""
+    try:
+        from footstats.api.main import limiter
+        limiter._storage.reset()
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 def df_mecze_minimal():
     """Minimalne DataFrame meczów do testów (kolumny polskie: gospodarz/goscie/gole_g/gole_a)."""

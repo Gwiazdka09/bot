@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
@@ -44,16 +45,32 @@ app.include_router(bankroll_router)
 app.include_router(settings_router)
 app.include_router(coupons_router)
 
+from fastapi_mcp import FastApiMCP as _FastApiMCP
 
-@app.get("/")
-def root():
-    return RedirectResponse(url="/preview")
+_mcp = _FastApiMCP(app)
+_mcp.mount_http()
 
+_dist = Path(__file__).parent.parent / "gui" / "dist"
 
-@app.get("/preview")
-def serve_preview():
-    html_path = Path(__file__).parent / "preview.html"
-    return FileResponse(html_path, media_type="text/html")
+if _dist.exists():
+    app.mount("/assets", StaticFiles(directory=str(_dist / "assets")), name="assets")
+
+    @app.get("/")
+    def root():
+        return FileResponse(str(_dist / "index.html"), media_type="text/html")
+
+    @app.get("/app")
+    def serve_app():
+        return FileResponse(str(_dist / "index.html"), media_type="text/html")
+else:
+    @app.get("/")
+    def root():
+        return RedirectResponse(url="/preview")
+
+    @app.get("/preview")
+    def serve_preview():
+        html_path = Path(__file__).parent / "preview.html"
+        return FileResponse(html_path, media_type="text/html")
 
 
 if __name__ == "__main__":

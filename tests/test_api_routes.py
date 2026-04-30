@@ -47,8 +47,8 @@ def test_route_accepts_valid_token(method, path):
     assert resp.status_code != 401, f"{method} {path} should not return 401 with valid token"
 
 
-def test_preview_is_public():
-    resp = client.get("/preview")
+def test_spa_root_is_public():
+    resp = client.get("/")
     assert resp.status_code == 200
 
 
