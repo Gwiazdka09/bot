@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "vexp": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "C:/Users/Kamil/AppData/Roaming/npm/node_modules/vexp-cli/bin/vexp.js",
+        "mcp",
+        "--workspace",
+        "F:/bot"
+      ],
+      "env": {}
+    }
+  }
+}
