@@ -1,0 +1,59 @@
+name: CD — Deploy to Cloud Run
+
+on:
+  push:
+    branches: [main]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/footstats-api
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.api
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ secrets.CLOUD_RUN_SERVICE }}
+          region: ${{ secrets.GCP_REGION }}
+          image: ${{ env.IMAGE }}:${{ github.sha }}
+          env_vars: |
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            ALLOWED_ORIGINS=${{ secrets.ALLOWED_ORIGINS }}
+            SENTRY_DSN=${{ secrets.SENTRY_DSN }}
+            ENV=production
+
+      - name: Verify deployment health
+        run: |
+          URL=$(gcloud run services describe ${{ secrets.CLOUD_RUN_SERVICE }} \
+            --region ${{ secrets.GCP_REGION }} \
+            --format 'value(status.url)')
+          curl -f "$URL/health"

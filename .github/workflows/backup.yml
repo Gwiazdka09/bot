@@ -1,0 +1,44 @@
+name: Daily DB Backup
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # 05:00 UTC daily (07:00 Warsaw)
+  workflow_dispatch:
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Download current DB from GCS
+        run: |
+          gcloud storage cp \
+            gs://${{ secrets.BUCKET_NAME }}/data/footstats_backtest.db \
+            data/footstats_backtest.db || echo "No existing DB in GCS, skipping"
+
+      - name: Run backup
+        env:
+          BUCKET_NAME: ${{ secrets.BUCKET_NAME }}
+        run: bash scripts/backup_db.sh
+
+      - name: Prune backups older than 30 days
+        run: |
+          CUTOFF=$(date -u -d '30 days ago' +%Y%m%d)
+          gcloud storage ls gs://${{ secrets.BUCKET_NAME }}/backups/ \
+            | grep "footstats_backtest_[0-9]" \
+            | while read f; do
+                FDATE=$(echo "$f" | grep -oP '\d{8}')
+                if [[ "$FDATE" < "$CUTOFF" ]]; then
+                  gcloud storage rm "$f"
+                fi
+              done

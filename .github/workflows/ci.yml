@@ -34,3 +34,23 @@ jobs:
 
       - name: Check imports
         run: python -c "import footstats; print('Import OK')"
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API Docker image
+        run: docker build -f Dockerfile.api -t footstats-api:ci .
+
+      - name: Verify health endpoint in container
+        run: |
+          docker run --rm -d -p 8000:8000 \
+            -e SECRET_KEY="test-secret-key-32-chars-long!!" \
+            -e ALLOWED_ORIGINS="http://localhost:3000" \
+            --name footstats-ci footstats-api:ci
+          sleep 8
+          curl -f http://localhost:8000/health
+          docker stop footstats-ci
