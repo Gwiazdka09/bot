@@ -18,7 +18,7 @@ from slowapi.util import get_remote_address
 load_dotenv()
 
 _sentry_dsn = os.environ.get("SENTRY_DSN", "")
-if _sentry_dsn:
+if _sentry_dsn and _sentry_dsn.startswith("https://"):
     sentry_sdk.init(
         dsn=_sentry_dsn,
         traces_sample_rate=0.1,
