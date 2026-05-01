@@ -70,3 +70,9 @@ logs/
 *.png
 .aider*
 !assets/DejaVuSans.ttf
+
+# ── vexp (lokalny indeks kodu, nie potrzebny w repo)
+.vexp/
+
+# ── Plany superpowers (lokalne notatki)
+docs/superpowers/plans/
