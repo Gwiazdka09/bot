@@ -159,7 +159,11 @@ def _init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_wf_correct ON wf_results(correct)
         """)
 
-_init_db()
+import logging as _logging
+try:
+    _init_db()
+except Exception as _db_err:
+    _logging.getLogger(__name__).error("DB init failed: %s", _db_err, exc_info=True)
 
 app = FastAPI(title="FootStats API", version="2.0")
 
