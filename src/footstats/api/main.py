@@ -220,7 +220,8 @@ else:
     @app.get("/preview")
     def serve_preview():
         html_path = Path(__file__).parent / "preview.html"
-        return FileResponse(html_path, media_type="text/html")
+        return FileResponse(html_path, media_type="text/html",
+                            headers={"Cache-Control": "no-store"})
 
 
 if __name__ == "__main__":
