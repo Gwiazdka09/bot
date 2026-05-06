@@ -30,6 +30,8 @@ SUPERBET_URL    = "https://superbet.pl"
 FOOTBALL_URL    = f"{SUPERBET_URL}/zaklady-bukmacherskie/pilka-nozna"
 FOOTBALL_TODAY  = f"{FOOTBALL_URL}?day=dzisiaj"
 FOOTBALL_TMRW   = f"{FOOTBALL_URL}?day=jutro"
+KURSY_BASE      = f"{SUPERBET_URL}/kursy/pilka-nozna"
+BB_BASE         = f"{SUPERBET_URL}/multi-bet-builder/pilka-nozna"
 
 # URL substrings that suggest a BetBuilder API response
 _BB_URL_HINTS = [
@@ -157,14 +159,19 @@ def _parsuj_kursy_z_dom(page: Page) -> list[Typ]:
 
 # ── Match search ──────────────────────────────────────────────────────────────
 
+def _slugify(name: str) -> str:
+    """Converts team name to Superbet slug fragment (lowercase, spaces→hyphens)."""
+    return name.lower().strip().replace(" ", "-").replace("_", "-")
+
+
 def znajdz_url_meczu(page: Page, dom: str, gost: str) -> str | None:
     """
-    Szuka meczu na stronie piłki nożnej Superbet (dzisiaj + jutro).
-    Szuka linku zawierającego nazwę drużyny w href lub tekście.
+    Szuka meczu na listingu piłki nożnej Superbet (dzisiaj + jutro).
+    Mecze są pod /kursy/pilka-nozna/{dom-slug}-vs-{gost-slug}-{id}.
     Zwraca pełny URL meczu lub None.
     """
-    dom_s  = dom.lower()[:6]
-    gost_s = gost.lower()[:6]
+    dom_s  = _slugify(dom)[:6]
+    gost_s = _slugify(gost)[:6]
 
     for listing_url in (FOOTBALL_TODAY, FOOTBALL_TMRW):
         try:
@@ -172,16 +179,15 @@ def znajdz_url_meczu(page: Page, dom: str, gost: str) -> str | None:
             time.sleep(3)
             zamknij_popup(page, _CFG)
 
-            # Scroll żeby SPA załadował wszystkie mecze
             for _ in range(4):
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 time.sleep(0.8)
 
-            # Zbierz wszystkie href z domeną superbet
+            # Match URLs live under /kursy/pilka-nozna/
             hrefs: list[str] = page.evaluate(
                 "Array.from(document.querySelectorAll('a[href]'))"
                 ".map(a => a.href)"
-                ".filter(h => h.includes('superbet.pl') && h.includes('zaklady'))"
+                ".filter(h => h.includes('/kursy/pilka-nozna/'))"
             )
 
             for href in hrefs:
@@ -189,16 +195,6 @@ def znajdz_url_meczu(page: Page, dom: str, gost: str) -> str | None:
                 if dom_s in href_l or gost_s in href_l:
                     logger.info("[BB] Mecz znaleziony: %s", href)
                     return href
-
-            # Fallback: sprawdź tekst linków
-            for link in page.query_selector_all("a[href]"):
-                tekst = (link.inner_text() or "").lower()
-                if dom_s in tekst or gost_s in tekst:
-                    href = link.get_attribute("href") or ""
-                    if "zaklady" in href or "pilka" in href or "live" in href:
-                        full = href if href.startswith("http") else SUPERBET_URL + href
-                        logger.info("[BB] Mecz znaleziony via tekst: %s", full)
-                        return full
 
         except Exception as e:
             logger.warning("[BB] Błąd listingu %s: %s", listing_url, e)
@@ -216,18 +212,35 @@ def pobierz_kursy_bb(page: Page, match_url: str) -> list[Typ]:
     Returns deduplicated list of Typ for betbuilder.generuj_kombinacje().
     """
     def _do(pg: Page) -> None:
+        # match_url is /kursy/pilka-nozna/{slug}-{id}
+        # BetBuilder lives at /multi-bet-builder/pilka-nozna/{slug}-{id}
+        slug = match_url.split("/kursy/pilka-nozna/")[-1] if "/kursy/" in match_url else ""
+        bb_url = f"{BB_BASE}/{slug}" if slug else None
+
+        # Try direct BetBuilder URL first
+        if bb_url:
+            try:
+                pg.goto(bb_url, wait_until="domcontentloaded", timeout=20000)
+                time.sleep(3)
+                zamknij_popup(pg, _CFG)
+                logger.info("[BB] Nawigacja do BB URL: %s", bb_url)
+                return
+            except Exception:
+                pass
+
+        # Fallback: go to kursy page, click BetBuilder tab
         pg.goto(match_url, wait_until="domcontentloaded", timeout=20000)
         time.sleep(2)
         zamknij_popup(pg, _CFG)
 
         for sel in (
-            "button:has-text('BetBuilder')",
+            "a:has-text('Multi BetBuilder')",
             "a:has-text('BetBuilder')",
+            "button:has-text('BetBuilder')",
             "[data-cy='bet-builder-tab']",
             "li:has-text('BetBuilder')",
             "span:has-text('BetBuilder')",
-            "button:has-text('Builder')",
-            "[class*='betbuilder']:not([class*='icon'])",
+            "a[href*='multi-bet-builder']",
         ):
             try:
                 pg.wait_for_selector(sel, timeout=4000)
