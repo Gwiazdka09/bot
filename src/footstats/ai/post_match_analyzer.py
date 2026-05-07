@@ -157,6 +157,22 @@ def analizuj_porazki(days_back: int = 14, dry_run: bool = False) -> dict:
         f"\n[PostMatchAnalyzer] Przeanalizowano: {stats['analyzed']} | "
         f"Pominięto: {stats['skipped']} | Błędy: {stats['errors']}"
     )
+
+    # Automatyczna aktualizacja Visual Brain
+    if stats['analyzed'] > 0 and not dry_run:
+        try:
+            print("[PostMatchAnalyzer] Aktualizacja Visual Brain...")
+            import subprocess
+            import sys
+            import os
+            # Znajdź ścieżkę do skryptu wizualizacji
+            script_path = os.path.join(os.getcwd(), 'scripts', 'visualize_brain.py')
+            if os.path.exists(script_path):
+                subprocess.Popen([sys.executable, script_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("  [OK] Visual Brain zaktualizowany w tle.")
+        except Exception as e:
+            print(f"  [ERR] Nie udało się zaktualizować Visual Brain: {e}")
+
     return stats
 
 
