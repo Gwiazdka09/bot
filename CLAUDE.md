@@ -1,27 +1,25 @@
-# FootStats — Claude Code Instructions
+# FootStats v3.3-stable
+Lang: PL. Context: Soccer predictions (Poisson + RAG + LLM).
 
-Projekt FootStats v3.2. Komunikacja po polsku.
+## Commands
+- Run: `python -m footstats.<module>`
+- Test: `pytest tests/ -v`
+- API: Port 8000. Dashboard: `/preview`
+- UI: `streamlit run src/footstats/dashboard.py`
+- Brain: `python scripts/visualize_brain.py`
 
-## Uprawnienia
+## Rules
+- Autonomy: Python, pytest, git, files, subagents.
+- ASK: `pip install`, `.env` changes, destructive ops (reset/force push/rm).
+- Style: PEP8, Type hints, PL comments/logs.
 
-Pełna autonomia: python, pytest, git commit/push, pliki, code review, subagenty.
-**Pytaj przy:** `pip install`, zmiany `.env`, operacje destrukcyjne (reset --hard, push --force, rm -rf).
+## Architecture (Pointers)
+- Structure: See `PROJECT_STRUCTURE.md`
+- Core: `src/footstats/` (AI, Core, Scrapers)
+- DB: `data/footstats_backtest.db` (SQLite)
+- Pipeline: `run_daily.bat` (8-step autonomous loop)
 
-## Projekt
-
-- **Package:** `src/footstats/`, run: `python -m footstats.<modul>`
-- **Testy:** `pytest tests/ -v`
-- **DB:** `data/footstats_backtest.db` (SQLite)
-- **API:** FastAPI port 8000, dashboard `/preview`
-- **Shell:** bash (Win11, Unix syntax)
-
-## Pipeline
-
-`run_daily.bat` @08:00 → `daily_agent_scheduler.py` → `daily_agent.py` (8-step):
-wyniki → AI wnioski → sędziowie → Bzzoiro ML → draft kupon → wait → final kupon → settlement
-
-## AI
-
-- **Groq llama-3.1-8b** w `ai/analyzer.py` — ultra-skeptical (szuka porażek)
-- Feedback loop: `post_match_analyzer.py` → wnioski wstrzykiwane do promptu
-- Kelly calibration: hit-rate + forma streak → mnożnik stawki
+## Tech Stack
+- Backend: FastAPI, Playwright (Scraping), Groq SDK (Llama 3.1 8B).
+- Frontend: Streamlit, vis-network (Brain Graph).
+- Logic: Poisson, Kelly Criterion, RAG Feedback Loop.
