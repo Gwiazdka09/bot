@@ -82,6 +82,8 @@ def send_kupon(dane: dict, stawka_a: float = 10.0, stawka_b: float = 5.0) -> boo
     for label, kupon_key, stawka in [
         ("KUPON A", "kupon_a", stawka_a),
         ("KUPON B", "kupon_b", stawka_b),
+        ("KUPON C", "kupon_c", stawka_a),
+        ("KUPON D", "kupon_d", stawka_a),
     ]:
         kupon     = dane.get(kupon_key, {})
         zdarzenia = kupon.get("zdarzenia", [])

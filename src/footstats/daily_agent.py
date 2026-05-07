@@ -329,7 +329,7 @@ def _weryfikuj_kupony(dane: dict, indeks: dict) -> dict:
     """
     usuniete: list[str] = []
 
-    for kupon_key in ("kupon_a", "kupon_b"):
+    for kupon_key in ("kupon_a", "kupon_b", "kupon_c", "kupon_d"):
         kupon = dane.get(kupon_key, {})
         zdarzenia = kupon.get("zdarzenia", [])
         if not zdarzenia:
@@ -394,6 +394,8 @@ def _zapisz_txt(dane: dict, stawka_a: float, stawka_b: float) -> Path:
     for label, kupon_key, stawka in [
         ("KUPON A", "kupon_a", stawka_a),
         ("KUPON B", "kupon_b", stawka_b),
+        ("KUPON C", "kupon_c", stawka_a),
+        ("KUPON D", "kupon_d", stawka_a),
     ]:
         kupon     = dane.get(kupon_key, {})
         zdarzenia = kupon.get("zdarzenia", [])
@@ -493,6 +495,8 @@ def _wyswietl(dane: dict, stawka_a: float, stawka_b: float):
     for label, kupon_key, stawka in [
         ("KUPON A", "kupon_a", stawka_a),
         ("KUPON B", "kupon_b", stawka_b),
+        ("KUPON C", "kupon_c", stawka_a),
+        ("KUPON D", "kupon_d", stawka_a),
     ]:
         kupon = dane.get(kupon_key, {})
         zdarzenia = kupon.get("zdarzenia", [])
@@ -591,7 +595,7 @@ def _dodaj_kelly(dane: dict, bankroll: float) -> None:
         multiplier = 1.0
     effective_bankroll = bankroll * multiplier
 
-    for kupon_key in ("kupon_a", "kupon_b"):
+    for kupon_key in ("kupon_a", "kupon_b", "kupon_c", "kupon_d"):
         for z in dane.get(kupon_key, {}).get("zdarzenia", []):
             p    = (z.get("pewnosc_pct") or 50) / 100.0
             odds = z.get("kurs") or 1.0
@@ -835,17 +839,14 @@ def main():
         sciezka_txt = None
 
     # Powiadomienie Windows (pomijamy w dry-run)
-    kupon_a   = dane.get("kupon_a", {})
-    kupon_b   = dane.get("kupon_b", {})
-    ile_nog_a = len(kupon_a.get("zdarzenia", []))
-    ile_nog_b = len(kupon_b.get("zdarzenia", []))
-    kurs_a    = kupon_a.get("kurs_laczny", 0) or 0
-    kurs_b    = kupon_b.get("kurs_laczny", 0) or 0
-    szansa_a  = kupon_a.get("szansa_wygranej_pct", "?")
+    kupony_info = []
+    for lbl, kkey in [("A", "kupon_a"), ("B", "kupon_b"), ("C", "kupon_c"), ("D", "kupon_d")]:
+        kp = dane.get(kkey, {})
+        if kp.get("zdarzenia"):
+            kupony_info.append(f"{lbl}: @{kp.get('kurs_laczny', 0):.2f} ({kp.get('szansa_wygranej_pct', '?')}%)")
     if not args.dry_run and sciezka_txt:
         notif_tekst = (
-            f"A: {ile_nog_a}n @{kurs_a:.2f} ({szansa_a}%) | "
-            f"B: {ile_nog_b}n @{kurs_b:.2f}\n{sciezka_txt.name}"
+            " | ".join(kupony_info) + f"\n{sciezka_txt.name}"
         )
         _powiadomienie_windows("FootStats - gotowy kupon", notif_tekst)
 
@@ -1110,7 +1111,7 @@ def _ocen_zdarzenia_decision_score(dane: dict, phase: str = "draft") -> None:
 
     _sep(f"DECISION SCORE — post-Groq [{phase.upper()}] (próg ≥ {threshold})")
 
-    for kupon_key in ("kupon_a", "kupon_b"):
+    for kupon_key in ("kupon_a", "kupon_b", "kupon_c", "kupon_d"):
         zdarzenia = dane.get(kupon_key, {}).get("zdarzenia", [])
         if not zdarzenia:
             continue

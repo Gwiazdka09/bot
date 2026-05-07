@@ -1036,10 +1036,9 @@ def _auto_zapisz_backtest(dane: dict, wyniki: list) -> None:
 
     if dane.get("top3"):
         _zapisz(dane["top3"], "top3")
-    if (dane.get("kupon_a") or {}).get("zdarzenia"):
-        _zapisz(dane["kupon_a"]["zdarzenia"], "kupon_a")
-    if (dane.get("kupon_b") or {}).get("zdarzenia"):
-        _zapisz(dane["kupon_b"]["zdarzenia"], "kupon_b")
+    for kkey in ("kupon_a", "kupon_b", "kupon_c", "kupon_d"):
+        if (dane.get(kkey) or {}).get("zdarzenia"):
+            _zapisz(dane[kkey]["zdarzenia"], kkey)
 
 
 def _buduj_cel_kuponow(cel_a: float | None, cel_b: float | None, stawka: float) -> str:
@@ -1189,30 +1188,31 @@ ZADANIE: Odpowiedz TYLKO w JSON (bez tekstu przed/po):
 {{
   "top3": [{{"mecz": "X vs Y", "typ": "1", "kurs": 1.48, "pewnosc_pct": 72, "ev_netto": 6.8, "uzasadnienie": "1 zdanie", "ryzyko": ["r1","r2","r3"]}}],
   "kupon_a": {{
-    "zdarzenia": [
-      {{"nr": 1, "mecz": "A vs B", "typ": "1", "kurs": 1.55, "pewnosc_pct": 70, "ryzyko": ["r1","r2","r3"]}},
-      {{"nr": 2, "mecz": "C vs D", "typ": "Over", "kurs": 1.80, "pewnosc_pct": 65, "ryzyko": ["r1","r2","r3"]}}
-    ],
-    "kurs_laczny": 8.7, "szansa_wygranej_pct": 19.4, "wygrana_netto": 38.3, "ryzyko_ogolne": "..."
+    "zdarzenia": [{{"nr": 1, "mecz": "A vs B", "typ": "1", "kurs": 1.55, "pewnosc_pct": 70, "ryzyko": ["r1","r2","r3"]}}],
+    "kurs_laczny": 1.55, "szansa_wygranej_pct": 70.0, "wygrana_netto": 4.84, "ryzyko_ogolne": "..."
   }},
   "kupon_b": {{
-    "zdarzenia": [
-      {{"nr": 1, "mecz": "A vs B", "typ": "2", "kurs": 2.10, "pewnosc_pct": 60, "ryzyko": ["r1","r2","r3"]}},
-      {{"nr": 2, "mecz": "E vs F", "typ": "BTTS", "kurs": 1.75, "pewnosc_pct": 63, "ryzyko": ["r1","r2","r3"]}}
-    ],
-    "kurs_laczny": 19.2, "szansa_wygranej_pct": 9.7, "wygrana_netto": 84.5, "ryzyko_ogolne": "..."
+    "zdarzenia": [{{"nr": 1, "mecz": "C vs D", "typ": "2", "kurs": 2.10, "pewnosc_pct": 62, "ryzyko": ["r1","r2","r3"]}}],
+    "kurs_laczny": 2.10, "szansa_wygranej_pct": 62.0, "wygrana_netto": 9.68, "ryzyko_ogolne": "..."
+  }},
+  "kupon_c": {{
+    "zdarzenia": [{{"nr": 1, "mecz": "E vs F", "typ": "Over", "kurs": 1.75, "pewnosc_pct": 65, "ryzyko": ["r1","r2","r3"]}}],
+    "kurs_laczny": 1.75, "szansa_wygranej_pct": 65.0, "wygrana_netto": 6.16, "ryzyko_ogolne": "..."
+  }},
+  "kupon_d": {{
+    "zdarzenia": [{{"nr": 1, "mecz": "G vs H", "typ": "BTTS", "kurs": 1.68, "pewnosc_pct": 61, "ryzyko": ["r1","r2","r3"]}}],
+    "kurs_laczny": 1.68, "szansa_wygranej_pct": 61.0, "wygrana_netto": 5.79, "ryzyko_ogolne": "..."
   }},
   "ostrzezenia": "2-3 zdania"
 }}
 
 ZAKAZY BEZWZGLEDNE:
+- Każdy kupon = DOKŁADNIE 1 zdarzenie (single). Zakaz AKO.
+- 4 różne mecze — każdy kupon inny mecz.
 - Kurs zdarzenia < 1.20: NIGDY.
-- Max 6 nogi w AKO (min 3 gdy cel kursu > 5x).
 - Grupy spadkowe/relegacyjne + Over 2.5: ZABRONIONE.
 - BetBuilder (Over+BTTS z jednego meczu): ZABRONIONE.
-- Maks. 2 mecze z tej samej ligi w jednym kuponie.
-- Każda noga musi mieć pewnosc_pct >= 60% — nie dokładaj nóg poniżej tego progu.
-- Wspólne nogi A↔B: dozwolone TYLKO przy pewnosc_pct >= 75%. Poniżej 75% — unikalne dla jednego kuponu.
+- Każda noga musi mieć pewnosc_pct >= 60%.
 
 REGUŁY SCEPTYCYZMU:
 - WYSOKA PEWNOŚĆ (75-100%) + WYSOKI KURS (>2.00) = DRASTYCZNE OBNIŻENIE. To jest kombinacja ryzyka.
@@ -1232,7 +1232,7 @@ REGUŁY SCEPTYCYZMU:
     if "top3" not in dane:
         dane["_raw"] = tekst
     else:
-        # Deduplikacja: usuń z kuponu B nogi wspólne z A o niskiej pewności
+        # Singiel — deduplikacja nieistotna, ale wywołaj dla spójności
         _deduplikuj_kupony(dane, min_wspolna_pewnosc=75)
         # Walidacja minimalnej szansy: niski próg gdy podany cel kursu
         if cel_wygrana_a is not None or cel_wygrana_b is not None:
