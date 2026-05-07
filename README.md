@@ -108,10 +108,15 @@ FootStats/
 
 3. **Uruchomienie Dashboardu**:
    ```bash
-   streamlit run src/footstats/dashboard.py
+   python -m streamlit run src/footstats/dashboard.py
    ```
 
-4. **Wizualizacja Mózgu**:
+4. **Kalibracja (v3.4)**: Jeśli chcesz odświeżyć parametry modelu Poisson:
+   ```bash
+   python -m footstats.core.lambda_optimizer
+   ```
+
+5. **Wizualizacja Mózgu**:
    ```bash
    python scripts/visualize_brain.py
    # Otwórz brain_graph.html w przeglądarce
