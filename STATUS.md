@@ -1,7 +1,7 @@
 # FootStats — STATUS PROJEKTU
 
 **Data:** 2026-05-07  
-**Wersja:** v3.2 (Ultra-Skeptical AI, Autonomous Scheduler, RAG, BetBuilder)  
+**Wersja:** v3.3 (Ultra-Skeptical AI, Autonomous Scheduler, RAG, BetBuilder + Superbet Live Odds)  
 **Branch:** main
 
 ---
@@ -21,16 +21,17 @@
 - **BetBuilder Engine** (`betbuilder.py`): Kombinacje z EV filtrowaniem, Poisson formatter
 - **BetBuilder Integration**: `decision_score` +5pkt za positive EV legs, `analyzer.py` context injection
 - **Playwright Scraper Base** (`base_playwright.py`): `SiteConfig`, `zaloguj`, `zamknij_popup`, `zapisz_cache` — shared helpery dla STS/Superbet/Superoferta
-- **Test Suite**: 431 passed, 0 failed, 11 skipped (pełna zieleń)
+- **Superbet BetBuilder Scraper** (`superbet_bb.py`): Bezpośrednie wywołanie `getBetbuilderMarketsForMatch` API → 1 400+ odds na mecz, filtr graczy, filtr kursu
+- **BetBuilder Conflict Detection Fix**: 8 reguł sprzeczności dla formatu `"Market: Selection"`, w tym over/under same-market dedup
+- **daily_agent.py `--bb` flag**: Integracja Superbet BB jako opcjonalny krok, zakres 5x–25x, Telegram push
+- **Test Suite**: 105 passed, 0 failed (pełna zieleń po BetBuilder refactorze)
 
 ---
 
 ## 🔴 REMAINING HIGH-PRIORITY
 
 ### #2 Superbet Scraper — Rzeczywiste kursy BetBuilder
-**Effort:** High (days)  
-**Need:** Real odds dla Over/BTTS/Combo z SuperSocial tab (Playwright XHR interception)  
-**Status:** Not started — `base_playwright.py` gotowy, brak parsera SuperSocial
+**Status:** ✅ DONE — `superbet_bb.py` direct API, 1 400+ odds, filtr gracze/kurs, Telegram push
 
 ---
 
@@ -50,10 +51,10 @@ Zrobione — GET /api/matches/today zwraca live Bzzoiro odds
 | Metric | Value |
 |--------|-------|
 | AI Win Rate (75%+ confidence) | 100% (3/3, 30-day backtest) |
-| Test Suite | 431 passed, 0 failed, 11 skipped |
+| Test Suite | 105 passed, 0 failed |
 | API Endpoints | 12 (matches, coupons, stats, bankroll, config) |
 | Embeddings (RAG) | 220 lessons, semantic search <1s |
-| BetBuilder Markets | 15 pre-computed (Poisson), EV filter min 10% |
+| BetBuilder Markets | 1 400+ live (Superbet API), 8 conflict rules, zakres 5x–25x |
 
 ---
 
