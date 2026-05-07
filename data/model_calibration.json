@@ -1,0 +1,15 @@
+{
+  "factor_home": 1.0,
+  "factor_away": 1.0,
+  "bias_raw_home": 1.0,
+  "bias_raw_away": 1.0,
+  "n_matches": 0,
+  "acc_1x2_pct": null,
+  "updated_at": "2026-05-07T20:52:42Z",
+  "safety_rail": [
+    0.85,
+    1.15
+  ],
+  "clamped_home": false,
+  "clamped_away": false
+}

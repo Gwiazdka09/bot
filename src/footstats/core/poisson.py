@@ -149,6 +149,18 @@ def predict_match(
     lambda_g = max(0.05, lambda_g)
     lambda_a = max(0.05, lambda_a)
 
+    # ── Kalibracja modelu (walk-forward bias correction) ─────────────
+    try:
+        from footstats.core.lambda_optimizer import load_calibration
+        _cal_h, _cal_a = load_calibration()
+        lambda_g *= _cal_h
+        lambda_a *= _cal_a
+    except Exception:
+        pass  # Brak pliku kalibracji → działaj z domyślnymi lambdami
+
+    lambda_g = max(0.05, lambda_g)
+    lambda_a = max(0.05, lambda_a)
+
     # ── Macierz Poissona ─────────────────────────────────────────────
     N = MAX_GOLE + 1
     M = np.zeros((N, N))

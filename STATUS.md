@@ -1,13 +1,20 @@
 # FootStats — Project Status Report
 
 **Last Updated:** 2026-05-07  
-**Current Version:** v3.3-stable  
+**Current Version:** v3.4-stable  
 **Build Status:** ✅ Passing (105 tests)  
 **System State:** Fully Autonomous Production Ready
 
 ---
 
 ## ✅ RECENT MILESTONES (Completed)
+
+### 🎯 v3.4 — Poisson Model Auto-Calibration
+- **`lambda_optimizer.py`**: Nowy moduł kalibracji — walk-forward na 200 meczach historycznych, wylicza Bias_Home i Bias_Away z porównania przewidywanych lambd z rzeczywistymi golami.
+- **Safety Rail [0.85–1.15]**: Mnożnik clampowany przy zapisie i odczycie — brak ryzyka overfittingu na małej próbce.
+- **`data/model_calibration.json`**: Trwały zapis mnożników z metadanymi (n_matches, acc_1x2, updated_at, clamped flags).
+- **`poisson.py` integracja**: Po wszystkich korektach (rewanż, H2H, forma) aplikuje `lambda_g *= factor_home`, `lambda_a *= factor_away`. Graceful fallback gdy brak pliku.
+- **CLI**: `python -m footstats.core.lambda_optimizer [--n 200] [--quiet]`
 
 ### 📂 Architectural Refactor & Cleanup
 - **Standardized Project Structure**: Moved utility scripts to `scripts/`, organized root directory, and unified documentation.
@@ -40,8 +47,8 @@
 
 ## 🚀 CURRENT FOCUS
 
-- **Performance Monitoring**: Fine-tuning Playwright memory usage for long-running scrapers.
-- **Model Calibration**: Periodic walk-forward validation to adjust Poisson lambda factors.
+- **Periodic Calibration**: Uruchom `python -m footstats.core.lambda_optimizer` po każdym sezonie lub co 500 meczów aby odświeżyć bias.
+- **SofaScore Injuries**: Scraper kontuzji/zawieszeń jako dodatkowy sygnał dla lambda.
 - **UI Expansion**: Adding more interactive charts to the Streamlit dashboard.
 
 ---
