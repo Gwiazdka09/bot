@@ -3,12 +3,17 @@ ai_client.py – Klient AI dla FootStats
 Priorytet: Groq (online, darmowy, 70B) → Ollama (lokalny, offline, 2B)
 """
 
+import logging
 import os
 import requests
 from dotenv import load_dotenv
 from footstats.utils.console import console
+from footstats.core.circuit_breaker import groq_circuit, ollama_circuit
+from footstats.core.exceptions import FootStatsCircuitOpenError
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 GROQ_MODEL   = "llama-3.1-8b-instant"
 OLLAMA_MODEL = "gemma2:2b"
@@ -18,55 +23,72 @@ OLLAMA_URL   = "http://localhost:11434/api/generate"
 def _groq(prompt: str, max_tokens: int = 600) -> str | None:
     """
     Odpytuje Groq API. Zwraca tekst lub None jeśli błąd.
-    Obsługuje RateLimitError gracefully — loguje warning zamiast error.
+    Obsługuje RateLimitError gracefully i circuit breaker.
     """
     klucz = os.getenv("GROQ_API_KEY", "").strip()
     if not klucz:
         return None
+
+    if groq_circuit.is_open:
+        logger.warning("[AI] Groq circuit OPEN — pomijam, przełączam na fallback")
+        return None
+
     try:
         import time
         time.sleep(2)  # Throttling to prevent 429
         import groq as groq_lib
-        client = groq_lib.Groq(api_key=klucz)
-        resp = client.chat.completions.create(
-            model=GROQ_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Jesteś ekspertem analitykiem piłkarskim. "
-                        "Odpowiadasz zawsze po polsku. "
-                        "Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po."
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=0.3,
-        )
-        return resp.choices[0].message.content
+
+        with groq_circuit:
+            client = groq_lib.Groq(api_key=klucz)
+            resp = client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "Jesteś ekspertem analitykiem piłkarskim. "
+                            "Odpowiadasz zawsze po polsku. "
+                            "Jeśli prosisz o JSON – zwracasz TYLKO JSON, bez żadnego tekstu przed ani po."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=max_tokens,
+                temperature=0.3,
+            )
+            return resp.choices[0].message.content
+    except FootStatsCircuitOpenError as e:
+        logger.warning("[AI] %s", e)
+        return None
     except Exception as e:
         err_str = str(e).lower()
-        # RateLimitError (429) — graceful handling, nie wywalaj
         if "429" in err_str or "rate_limit" in err_str or "too many requests" in err_str:
-            print(f"[AI] ⚠️  Groq RateLimitError (429) — zwracam None, backtest czeka i retry")
+            logger.warning("[AI] Groq RateLimitError (429) — zwracam None")
         else:
-            print(f"[AI] Groq błąd: {e}")
+            logger.error("[AI] Groq błąd: %s", e)
         return None
 
 
 def _ollama(prompt: str) -> str | None:
     """Odpytuje lokalną Ollamę. Zwraca tekst lub None jeśli błąd."""
+    if ollama_circuit.is_open:
+        logger.warning("[AI] Ollama circuit OPEN — pomijam")
+        return None
+
     try:
-        r = requests.post(
-            OLLAMA_URL,
-            json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
-            timeout=120,
-        )
-        r.raise_for_status()
-        return r.json().get("response", "")
+        with ollama_circuit:
+            r = requests.post(
+                OLLAMA_URL,
+                json={"model": OLLAMA_MODEL, "prompt": prompt, "stream": False},
+                timeout=120,
+            )
+            r.raise_for_status()
+            return r.json().get("response", "")
+    except FootStatsCircuitOpenError as e:
+        logger.warning("[AI] %s", e)
+        return None
     except Exception as e:
-        print(f"[AI] Ollama błąd: {e}")
+        logger.error("[AI] Ollama błąd: %s", e)
         return None
 
 
@@ -77,12 +99,12 @@ def zapytaj_ai(prompt: str, max_tokens: int = 600) -> str:
     """
     odpowiedz = _groq(prompt, max_tokens)
     if odpowiedz:
-        print("[AI] Źródło: Groq (llama-3.1-8b-instant)")
+        logger.info("[AI] Źródło: Groq (%s)", GROQ_MODEL)
         return odpowiedz
 
     odpowiedz = _ollama(prompt)
     if odpowiedz:
-        print("[AI] Źródło: Ollama (gemma2:2b lokalnie)")
+        logger.info("[AI] Źródło: Ollama (%s)", OLLAMA_MODEL)
         return odpowiedz
 
     raise RuntimeError(
