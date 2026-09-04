@@ -270,3 +270,32 @@ def test_brier_jest_mniejszy_gdy_prognoza_trafia():
     b_traf = brier_1x2(np.array([2.5]), np.array([0.5]), np.array([0]))[0]
     b_pudlo = brier_1x2(np.array([2.5]), np.array([0.5]), np.array([2]))[0]
     assert b_traf < b_pudlo
+
+
+# ─────────────────────────────  devig i mieszanka  ───────────────────────────
+
+def test_devig_zdejmuje_marze_i_sumuje_do_jedynki():
+    from estymator_lambda import devig
+
+    p = devig(np.array([2.0]), np.array([4.0]), np.array([4.0]))
+    assert p[0].sum() == pytest.approx(1.0)
+    # 1/2 : 1/4 : 1/4 -> 0.5 : 0.25 : 0.25 (suma odwrotnosci 1.0, brak marzy)
+    assert p[0] == pytest.approx([0.5, 0.25, 0.25])
+
+
+def test_devig_odrzuca_kursy_bez_sensu():
+    from estymator_lambda import devig
+
+    zle = devig(np.array([1.0, np.nan, 2.0]), np.array([4.0, 4.0, 0.0]),
+                np.array([4.0, 4.0, 4.0]))
+    assert np.isnan(zle[0]).all(), "kurs 1.0 to pewny zysk — wiersz musi wypasc"
+    assert np.isnan(zle[1]).all()
+    assert np.isnan(zle[2]).all()
+
+
+def test_brier_z_p_zgodny_ze_skrotem_z_lambd():
+    from estymator_lambda import brier_z_p, p_1x2
+
+    lg, la = np.array([1.5, 2.1]), np.array([1.1, 0.8])
+    wyn = np.array([0, 2])
+    assert brier_z_p(p_1x2(lg, la), wyn) == pytest.approx(brier_1x2(lg, la, wyn))

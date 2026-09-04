@@ -88,6 +88,27 @@ REGUŁA DECYZYJNA, ZAMROŻONA:
      zbiera >= 80% zysku pełnego dopasowania, rekomendacją są DWIE LICZBY,
      nie przebudowa estymatora. Najmniejsza zmiana, która robi robotę.
 
+ANEKS, dopisany 2026-09-05 PO zobaczeniu wyniku ramienia głównego, ale PRZED
+policzeniem czegokolwiek z tego, co opisuje.
+
+DLACZEGO ANEKS W OGÓLE. Ramię główne mierzy model W IZOLACJI. Produkcja tak nie
+gra: `predict_match` idzie potem przez `ensemble_probs`, gdzie miesza się z
+devigiem kursów — na API z wagą rynku 0.70. Jeśli poprawka estymatora znika po
+zmieszaniu, jest wynikiem laboratoryjnym i nie ma po co jej wdrażać. Bez tego
+sprawdzenia zamieniałbym cztery stałe na produkcji za zero.
+
+CO LICZYMY: Brier 1X2 mieszanki (1-w)*model + w*rynek na holdoucie, dla
+w ∈ {0.00, 0.30, 0.70, 1.00}, osobno dla estymatora produkcyjnego i dopasowanego.
+Rynek to devig proporcjonalny z ZAMKNIĘCIA Pinnacle (`odds_*_pinn`) — najostrzejsza
+cena, jaką mamy. To jest wybór KONSERWATYWNY: im ostrzejszy partner w mieszance,
+tym mniej zostaje do dołożenia modelowi. Kurs bukmacherski, z którym produkcja
+miesza realnie, jest słabszy, więc zysk przy nim może być tylko większy.
+
+REGUŁA ANEKSU, ZAMROŻONA: zmiana idzie na produkcję tylko wtedy, gdy przy
+w = 0.70 — czyli wadze, którą API realnie ma ustawioną — sparowana różnica
+Briera (produkcja minus dopasowane) ma z >= +2. Poniżej: wynik zostaje
+pomiarem, kod produkcyjny bez zmian.
+
 CZEGO TO NIE ZMIENIA. Model dalej przegrywa z ceną w 39 ligach na 39. Nawet
 pełne domknięcie luki λ nie czyni z niego przewagi nad rynkiem; to jest praca
 nad JAKOŚCIĄ prognozy, nie nad zyskiem.
@@ -306,8 +327,8 @@ def logwiar_goli(lg: np.ndarray, la: np.ndarray,
     return _poisson.logpmf(hg, lg) + _poisson.logpmf(ag, la)
 
 
-def brier_1x2(lg: np.ndarray, la: np.ndarray, wynik: np.ndarray) -> np.ndarray:
-    """Brier wieloklasowy 1X2 z macierzy Poissona (rho=0, jak produkcja).
+def p_1x2(lg: np.ndarray, la: np.ndarray) -> np.ndarray:
+    """(n, 3) prawdopodobieństw 1X2 z macierzy Poissona (rho=0, jak produkcja).
 
     `USE_DC_TAU` jest na produkcji wyłączone, więc macierz to czysty iloczyn
     zewnętrzny obciety na `MAX_GOLI` i renormalizowany.
@@ -323,10 +344,34 @@ def brier_1x2(lg: np.ndarray, la: np.ndarray, wynik: np.ndarray) -> np.ndarray:
     pw = (pg * p_mniej).sum(axis=1)
     pr = (pg * pa).sum(axis=1)
     pp = 1.0 - pw - pr
-    p = np.stack([pw, pr, pp], axis=1)
+    return np.stack([pw, pr, pp], axis=1)
+
+
+def brier_z_p(p: np.ndarray, wynik: np.ndarray) -> np.ndarray:
+    """Brier wieloklasowy per mecz z gotowych prawdopodobieństw."""
     y = np.zeros_like(p)
     y[np.arange(len(wynik)), wynik] = 1.0
     return ((p - y) ** 2).sum(axis=1)
+
+
+def brier_1x2(lg: np.ndarray, la: np.ndarray, wynik: np.ndarray) -> np.ndarray:
+    """Brier 1X2 wprost z λ — skrót na `brier_z_p(p_1x2(...))`."""
+    return brier_z_p(p_1x2(lg, la), wynik)
+
+
+def devig(o_h: np.ndarray, o_d: np.ndarray, o_a: np.ndarray) -> np.ndarray:
+    """(n, 3) prawdopodobieństw z kursów, metodą proporcjonalną — jak produkcja.
+
+    Kurs <= 1.0 albo brak daje wiersz NaN; taki mecz wypada z porównania
+    mieszanek, w obu ramionach naraz.
+    """
+    o = np.stack([o_h, o_d, o_a], axis=1).astype(float)
+    zle = ~np.isfinite(o).all(axis=1) | (o <= 1.0).any(axis=1)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        inv = 1.0 / o
+        p = inv / inv.sum(axis=1, keepdims=True)
+    p[zle] = np.nan
+    return p
 
 
 def sparowana(d: np.ndarray) -> tuple[float, float, float]:
@@ -365,11 +410,15 @@ def _sklej(zestawy_lista, meta, klucze) -> dict:
     """Skleja per-ligowe tablice w jedną, dorzucając gole/wynik/ligę/datę."""
     out = {k: [] for k in klucze}
     out.update({"hg": [], "ag": [], "wynik": [], "league": [], "date": []})
+    out.update({k: [] for k in KOL_KURSOW})
     for r, (liga, gl) in zip(zestawy_lista, meta):
         if r is None:
             continue
         for k in klucze:
             out[k].append(r[k])
+        for k in KOL_KURSOW:
+            out[k].append(gl[k].to_numpy(float) if k in gl.columns
+                          else np.full(len(gl), np.nan))
         out["hg"].append(gl["hg"].to_numpy(float))
         out["ag"].append(gl["ag"].to_numpy(float))
         wyn = np.where(gl["hg"] > gl["ag"], 0, np.where(gl["hg"] == gl["ag"], 1, 2))
@@ -378,6 +427,8 @@ def _sklej(zestawy_lista, meta, klucze) -> dict:
         out["date"].append(gl["date"].to_numpy())
     return {k: np.concatenate(v) for k, v in out.items()}
 
+
+KOL_KURSOW = ("odds_h_pinn", "odds_d_pinn", "odds_a_pinn")
 
 KLUCZE = ("atak_dom", "obrona_dom", "atak_wyj", "obrona_wyj",
           "sr_dom", "sr_wyj", "n_gosp", "n_gosc",
@@ -535,6 +586,60 @@ def main() -> None:
     udzial = (sr_s / sr) if (np.isfinite(sr) and sr > 0) else float("nan")
     print(f"\n  Udzial samej skali w zysku pelnego dopasowania: {udzial:.1%}")
 
+    # ── rozklad na czynniki (POST-HOC, opisowy) ───────────────────────────
+    # Regula 4 pytala tylko o skale i odpowiedz brzmi „nic". Zostaje pytanie,
+    # ktore z DWOCH pozostalych zmian niesie zysk — a od tego zalezy, czy
+    # produkcja dostaje jedna nowa stala, czy trzy. To jest ROZKLAD OPISOWY
+    # dopisany PO zobaczeniu wyniku; nie ma i nie moze miec mocy rozstrzygania.
+    print(f"\n{kreska}\n  ROZKLAD NA CZYNNIKI — POST-HOC, bez mocy decyzyjnej\n{kreska}")
+    fit_k = dopasuj(d_prod, tren, tylko_skala=False)
+    lg_k, la_k = lambdy(d_prod, fit_k["k"], fit_k["skala_g"], fit_k["skala_a"])
+    ll_k = logwiar_goli(lg_k, la_k, d_prod["hg"], d_prod["ag"])
+    br_k = brier_1x2(lg_k[wspolne], la_k[wspolne], d_prod["wynik"][wspolne])
+
+    lg_o, la_o = lambdy(d_n, 0.0, 1.0, 1.0)      # samo okno+zanik, bez sciagania
+    ll_o = logwiar_goli(lg_o, la_o, d_n["hg"], d_n["ag"])
+    br_o = brier_1x2(lg_o[wspolne], la_o[wspolne], d_n["wynik"][wspolne])
+
+    ramiona = [
+        ("samo SCIAGANIE (okno 30, plaskie)", ll_k, br_k, f"k={fit_k['k']:.2f}"),
+        ("samo OKNO+ZANIK (bez sciagania)", ll_o, br_o,
+         f"okno {najlepszy['okno']}, polowicz {pol_txt}"),
+        ("OBA (pelne dopasowanie)", ll_n, br_n_w, "j.w. + k"),
+    ]
+    for nazwa, ll_x, br_x, opis in ramiona:
+        s_x, _, z_x = sparowana((ll_x - ll_p)[wspolne])
+        s_bx, _, z_bx = sparowana(br_p_w - br_x)
+        czesc = (s_x / sr) if (np.isfinite(sr) and sr > 0) else float("nan")
+        print(f"  {nazwa:36s} {opis:26s}  ll {s_x:+.5f} (z={z_x:+6.2f})"
+              f"  {czesc:6.1%}   Brier {s_bx:+.5f} (z={z_bx:+6.2f})")
+
+    # ── ANEKS: czy zysk przezywa zmieszanie z cena ────────────────────────
+    print(f"\n{kreska}\n  ANEKS — Brier mieszanki (1-w)*model + w*rynek, holdout\n{kreska}")
+    p_rynek = devig(d_prod["odds_h_pinn"], d_prod["odds_d_pinn"], d_prod["odds_a_pinn"])
+    ma_cene = np.isfinite(p_rynek).all(axis=1)
+    mix_maska = wspolne & ma_cene
+    print(f"  Meczow z zamknieciem Pinnacle: {int(mix_maska.sum())} "
+          f"z {int(wspolne.sum())} ({mix_maska.sum() / max(wspolne.sum(), 1):.1%})")
+    p_prod_h = p_1x2(lg_p[mix_maska], la_p[mix_maska])
+    p_now_h = p_1x2(lg_n[mix_maska], la_n[mix_maska])
+    p_ryn_h = p_rynek[mix_maska]
+    wyn_h = d_prod["wynik"][mix_maska]
+    aneks = []
+    for w in (0.0, 0.30, 0.70, 1.0):
+        b_pr = brier_z_p((1 - w) * p_prod_h + w * p_ryn_h, wyn_h)
+        b_no = brier_z_p((1 - w) * p_now_h + w * p_ryn_h, wyn_h)
+        s_w, se_w, z_w = sparowana(b_pr - b_no)
+        aneks.append({"w": w, "brier_prod": float(b_pr.mean()),
+                      "brier_nowe": float(b_no.mean()),
+                      "d": s_w, "se": se_w, "z": z_w})
+        print(f"  w={w:.2f}   prod {b_pr.mean():.5f}   nowe {b_no.mean():.5f}"
+              f"   roznica {s_w:+.5f}  SE {se_w:.5f}  z={z_w:+.2f}")
+    z_prod = next(a["z"] for a in aneks if a["w"] == 0.70)
+    aneks_ok = np.isfinite(z_prod) and z_prod >= 2.0
+    print(f"\n  REGULA ANEKSU (w=0.70, waga API): z={z_prod:+.2f}  ->  "
+          f"{'wdrozenie uzasadnione' if aneks_ok else 'ZOSTAJE POMIAREM, prod bez zmian'}")
+
     # ── replikacja po ligach (regula 3) ───────────────────────────────────
     print(f"\n{kreska}\n  REPLIKACJA PO LIGACH (holdout, n >= {MIN_LIGA_HOLDOUT})\n{kreska}")
     ligi_plus = ligi_all = 0
@@ -563,7 +668,12 @@ def main() -> None:
     print(f"  2. Brier nie gorszy (z > -2)    : {'TAK' if r2 else 'NIE'}  (z={z_b:+.2f})")
     print(f"  3. >= 2/3 lig dodatnie          : {'TAK' if r3 else 'NIE'}  "
           f"({ligi_plus}/{ligi_all})")
-    if r1 and r2 and r3:
+    print(f"  A. mieszanka w=0.70 z >= +2      : {'TAK' if aneks_ok else 'NIE'}  "
+          f"(z={z_prod:+.2f})")
+    if r1 and r2 and r3 and not aneks_ok:
+        print("\n  WNIOSEK: estymator jest lepszy w izolacji, ale zysk NIE przezywa\n"
+              "  zmieszania z cena przy wadze, ktora API realnie ma. Zostaje pomiarem.")
+    elif r1 and r2 and r3:
         if np.isfinite(udzial) and udzial >= 0.80:
             print("\n  WNIOSEK: zmiana potwierdzona, ale niesie ja SAMA SKALA "
                   f"({udzial:.0%}).\n  Rekomendacja: dwie liczby "
@@ -593,6 +703,8 @@ def main() -> None:
             "sama_skala": {**fit_skala, "d_ll": sr_s, "z_ll": z_s,
                            "d_brier": sr_bs, "z_brier": z_bs,
                            "udzial": udzial},
+            "aneks_mieszanka": aneks,
+            "aneks_ok": bool(aneks_ok),
             "siatka": siatka,
             "per_liga": per_liga,
             "ligi_plus": ligi_plus, "ligi_all": ligi_all,
