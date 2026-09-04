@@ -264,15 +264,22 @@ def raport_3(lam_ryn, p_mod, p_ryn, y) -> None:
     print(f"  sparowane model-hybryda {d['roznica']:+.5f}  SE {d['se']:.5f}"
           f"  z {d['z']:+.2f}")
 
-    print("\n  REGULA DECYZYJNA (zamrozona przed przebiegiem):")
-    udzial = zamkniete / luka if luka else 0.0
-    if udzial >= 1 / 3:
-        print("    Podmiana samych lambd zamyka >= 1/3 luki -> waskim gardlem sa")
-        print("    OCENY SIL DRUZYN. Praca idzie w estymator: okno .tail(30),")
-        print("    zanik czasowy, przewaga gospodarza — nigdy niedopasowane.")
-    else:
-        print("    Podmiana lambd zamyka < 1/3 luki -> nawet doskonale oczekiwania")
-        print("    bramkowe nie wystarcza. Najmocniejsza forma tezy o suficie.")
+    print("\n  UWAGA DO ODCZYTU — POMIAR 3 NIE JEST NIEZALEZNYM DOWODEM.")
+    print("    Lambdy rynku dopasowano tak, ZEBY odtwarzaly jego 1X2, po czym")
+    print("    przepuszczono je przez te sama macierz. Hybryda MUSI wiec wyjsc")
+    print("    rowna rynkowi, a udzial 100% jest konsekwencja konstrukcji,")
+    print("    nie odkryciem. Bledna byla moja pre-rejestracja, nie wynik.")
+    print("\n    Zdanie, ktore te liczba UPRAWNIA, brzmi inaczej i wymaga reszt")
+    print("    dopasowania (zmierzone osobno: srednia 0.00008 dla obu stron):")
+    print("    obie prognozy leza na TEJ SAMEJ dwuparametrowej rozmaitosci")
+    print("    Poissona-DC z dokladnoscia do 1e-4, wiec w wymiarze 1X2 nie ma")
+    print("    miedzy nami roznicy KSZTALTU — jest wylacznie roznica LAMBD.")
+    print("    Rozstrzyga pomiar 1, i on jest niezalezny: nasze lambdy sa")
+    print("    istotnie gorsze w przewidywaniu FAKTYCZNYCH goli.")
+    print("\n    Pomiar 2 dokłada zastrzezenie: sama rozmaitosc jest za mala.")
+    print("    Rynkowe Over 2.5 stoi 3.3pp wyzej, niz daje jego wlasna lambda")
+    print("    z 1X2 — jedna para lambd przy rho=-0.05 nie miesci obu jego liczb.")
+    print("    A `rho` to kolejna stala wpisana z reki i nigdy niedopasowana.")
 
 
 if __name__ == "__main__":
