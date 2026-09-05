@@ -53,3 +53,31 @@ z dokladnoscia do 1e-4. To jest warunek, ktory czyni pomiar 1 sensownym.
 Lambdy rynku dopasowano tak, ZEBY odtwarzaly jego 1X2, po czym przepuszczono
 je przez te sama macierz — hybryda musiala wyjsc rowna rynkowi. „100%" jest
 konsekwencja konstrukcji, nie odkryciem. Blad byl w pre-rejestracji.
+
+## SPROSTOWANIE 2026-09-05 — POZIOMY λ W TYM POMIARZE SĄ ZAWYŻONE
+
+Ten skrypt nie CZYTAŁ λ modelu, tylko odzyskiwał je z jego 1X2 macierzą
+Dixona-Colesa przy `rho=-0.05`. Produkcja generuje to 1X2 przy `rho=0`
+(`USE_DC_TAU` wyłączone, `poisson._macierz`). Macierz odzyskująca była inna
+niż generująca, a docstring twierdził, że to ta sama.
+
+Skala błędu, zmierzona na 400 losowych parach λ:
+
+```
+prawdziwe srednie lambda   1.5786 / 1.3264
+odzyskane przy rho=-0.05   1.6921 / 1.4313      +7.2% / +7.9%
+```
+
+Prawdziwe λ estymatora, odczytane wprost ścieżką ligową produkcji
+(`estymator_lambda.py`, n=134 330): **1.4726 / 1.1666** przy faktycznych
+**1.4883 / 1.1790** — czyli praktycznie bez obciążenia, jeśli już to minimalnie
+zaniżone. Nie 1.573 / 1.264.
+
+**Zdanie „model systematycznie przeszacowuje liczbę goli" jest FAŁSZYWE** i nie
+wolno go dalej cytować.
+
+Pomiar 1 (sparowana log-wiarygodność, z=−23.65) porównywał obie λ z faktycznymi
+golami, obie odzyskane tą samą błędną macierzą — kierunek prawdopodobnie stoi,
+wielkość jest skażona. Wymaga przeliczenia na prawdziwych λ modelu.
+
+Szczegóły: `docs/pomiary/estymator_lambda_2026-09-05.md`.
