@@ -109,6 +109,27 @@ W_BAYESIAN      = float(os.getenv("W_BAYESIAN", "0.5"))   # waga ramienia DC (0=
 USE_DC_TAU = os.getenv("USE_DC_TAU", "0").strip() not in ("0", "false", "False", "")
 DC_RHO     = float(os.getenv("DC_RHO", "-0.13"))
 
+# ── Korekta tau w GLOWNEJ sciezce (05.09.2026) ──────────────────────────────
+# `USE_DC_TAU`/`DC_RHO` wyzej siegaja WYLACZNIE `poisson_bayesian`. Glowna
+# sciezka `poisson.predict_match` -> `poisson._macierz` do 05.09.2026 nie miala
+# korekty tau w ogole — slowo `rho` w tym pliku nie wystepowalo.
+#
+# Zmierzone (`scripts/ksztalt_dc.py`, pre-rejestracja 4e0591ab1, holdout >=2024,
+# n=31 628): przy rho=0 zanizamy remisy o 1.36 pp (0.2484 wobec 0.2620). rho
+# dopasowane na treningu na log-wiarygodnosci FAKTYCZNYCH WYNIKOW wychodzi
+# -0.04 i na holdoucie daje Brier 1X2 0.62077 -> 0.62044 (sparowane +0.00032,
+# z=+4.76), log-wiarygodnosc wyniku +0.00059 (z=+3.32), 31 lig na 38 dodatnich.
+#
+# UCZCIWIE O SKALI: po rozcienczeniu blendem 50/50 z ramieniem bayesian i cena
+# przy wadze rynku 0.70 zostaje +0.00003 Briera (z=+2.11). Istotne, ale nikt
+# tego nie zobaczy. Wdrozone, bo jest darmowe, przetestowane i zgodne z
+# kierunkiem bledu — nie dlatego, ze cokolwiek zmienia w wynikach.
+#
+# tau NIE RUSZA Over 2.5 ani BTTS: poprawki czterech komorek sumuja sie
+# tozsamosciowo do zera, a wszystkie maja sume goli <= 2.
+# Escape-hatch: `DC_RHO_CLASSIC=0` wraca do zachowania sprzed 05.09.2026.
+DC_RHO_CLASSIC = float(os.getenv("DC_RHO_CLASSIC", "-0.04"))
+
 # ── Sila druzyny liczona TEZ ze strzalow celnych (13.08.2026) ──
 # Gol to zdarzenie rzadkie (~1.4 na druzyne), wiec srednia z 30 meczow jest
 # szumna — to jest zrodlo braku ROZDZIELCZOSCI modelu. Strzal celny pada 4-5x

@@ -257,7 +257,7 @@ def test_brier_zgodny_z_macierza_produkcyjna():
     from footstats.config import MAX_GOLE
 
     for lg, la in ((1.5, 1.1), (2.4, 0.7), (0.6, 2.2)):
-        pw, pr, pp = _macierz(lg, la, MAX_GOLE)[:3]
+        pw, pr, pp = _macierz(lg, la, MAX_GOLE + 1)[:3]  # produkcja wola N = MAX_GOLE+1
         for idx, oczek in ((0, pw), (1, pr), (2, pp)):
             b = brier_1x2(np.array([lg]), np.array([la]), np.array([idx]))[0]
             # Brier przy trafionym wyniku = (p-1)^2 + suma kwadratów reszty.

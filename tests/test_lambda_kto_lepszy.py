@@ -49,7 +49,10 @@ def test_over25_zgodne_z_macierza_produkcyjna():
     from footstats.core.poisson import _macierz
 
     for lg, la in ((1.5, 1.1), (2.6, 2.1), (0.7, 0.6)):
-        oczek = _macierz(lg, la, MAX_GOLE)[4]
+        # Produkcja wola `_macierz(..., MAX_GOLE + 1)` = 9 komorek; rho=0,
+        # bo `over25_z_lambd` odtwarza rozklad BEZ korekty tau (tau i tak
+        # Over 2.5 nie rusza — patrz tests/test_poisson_rho.py).
+        oczek = _macierz(lg, la, MAX_GOLE + 1, 0.0)[4]
         assert over25_z_lambd(np.array([lg]), np.array([la]))[0] == pytest.approx(
             oczek, abs=2e-4)
 

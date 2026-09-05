@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 from scipy.stats import poisson
 from footstats.config import (
-    MAX_GOLE, BONUS_DOMOWY, OSTATNIE_N,
+    MAX_GOLE, BONUS_DOMOWY, OSTATNIE_N, DC_RHO_CLASSIC,
 )
 
 logger = logging.getLogger(__name__)
@@ -17,12 +17,24 @@ from footstats.core.form import _oblicz_sile_wazona
 # ================================================================
 
 @functools.lru_cache(maxsize=512)
-def _macierz(lambda_g: float, lambda_a: float, N: int) -> tuple:
+def _macierz(lambda_g: float, lambda_a: float, N: int, rho: float = 0.0) -> tuple:
     """
-    Cached Poisson matrix with Laplace smoothing.
+    Cached Poisson matrix with Laplace smoothing and Dixon-Coles tau.
 
     Args should be pre-rounded to 4dp.
     Smoothing prevents zero probabilities and numerical instability.
+
+    `rho` to korekta Dixona-Colesa (1997): mnozy CZTERY komorki niskiego wyniku,
+    reszte macierzy zostawia nietknieta. Przy rho<0 rosna 0-0 i 1-1, maleja 1-0
+    i 0-1 — Poisson notorycznie zaniza remisy niskobramkowe i zmierzylismy to
+    u siebie (1.36 pp na holdoucie, patrz `config.DC_RHO_CLASSIC`).
+
+    Poprawki sumuja sie TOZSAMOSCIOWO do zera, wiec `over25` i `btts` sa od rho
+    NIEZALEZNE — obie te wielkosci licza sie z komorek o sumie goli, ktorej tau
+    nie przesuwa. Pilnuje tego `tests/test_poisson_rho.py`.
+
+    `rho` JEST czescia klucza cache — inaczej pierwsze wywolanie zatruloby
+    wszystkie nastepne.
     """
     SMOOTHING_EPS = 1e-8
 
@@ -33,6 +45,18 @@ def _macierz(lambda_g: float, lambda_a: float, N: int) -> tuple:
     pmf_a = (pmf_a + SMOOTHING_EPS) / (1.0 + N * SMOOTHING_EPS)
 
     M = np.outer(pmf_g, pmf_a)
+
+    if rho != 0.0 and N >= 2:
+        for (i, j), tau in (
+            ((0, 0), 1.0 - lambda_g * lambda_a * rho),
+            ((0, 1), 1.0 + lambda_g * rho),
+            ((1, 0), 1.0 + lambda_a * rho),
+            ((1, 1), 1.0 - rho),
+        ):
+            # Obciecie od dolu: przy duzych lambdach i mocnym rho wzor potrafi
+            # zejsc ponizej zera, a ujemne prawdopodobienstwo zepsulo by rozklad.
+            M[i, j] *= max(0.0, tau)
+
     M_sum = np.sum(M)
     if M_sum > 0:
         M = M / M_sum
@@ -351,7 +375,7 @@ def predict_match(
     from footstats.config import FINAL_REMIS_BOOST
     N = MAX_GOLE + 1
     pw, pr, pp, btts, over25_raw, wynik_g, wynik_a, top5_data = _macierz(
-        round(lambda_g, 4), round(lambda_a, 4), N
+        round(lambda_g, 4), round(lambda_a, 4), N, DC_RHO_CLASSIC
     )
 
     # ── v2.6 Final boost: wiekszy remis w meczach bez rewanzu ────────

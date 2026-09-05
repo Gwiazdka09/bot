@@ -144,7 +144,11 @@ OKNA = (10, 15, 20, 30, 45, 60, 90)
 POLOWICZE = (np.inf, 60.0, 30.0, 15.0, 8.0)
 MIN_MECZOW_LIGOWYCH = 6      # parytet z form.MIN_MECZOW_LIGOWYCH
 WAGA_STRZALOW = 0.7          # parytet z config.WAGA_STRZALOW — NIE dopasowywana
-MAX_GOLI = 8                 # parytet z config.MAX_GOLE
+# Liczba KOMOREK na strone. Produkcja wola `_macierz(..., MAX_GOLE + 1)`,
+# czyli gole 0..8 = 9 komorek. Osiem komorek (blad do 2026-09-05) roznilo
+# sie od produkcji nawet o 2.6e-3 w p(1) przy wysokich lambdach — wiecej
+# niz efekty, ktore tu mierzymy.
+MAX_GOLI = 9
 PROD = {"okno": 30, "polowicz": np.inf, "k": 0.0, "skala_g": 1.0, "skala_a": 1.0}
 MIN_LIGA_HOLDOUT = 300       # próg ligi w replikacji (reguła 3)
 

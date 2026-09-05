@@ -15,6 +15,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
+from estymator_lambda import MAX_GOLI  # noqa: E402
 from ksztalt_dc import dopasuj_rho, pmf_obciete, wyjscia_dc  # noqa: E402
 
 PARY = ((1.5, 1.1), (2.4, 0.7), (0.6, 2.2), (1.0, 1.0))
@@ -33,21 +34,57 @@ def test_rho_zero_zgodne_z_macierza_produkcyjna(para):
     from footstats.config import MAX_GOLE
     from footstats.core.poisson import _macierz
 
-    pw, pr, pp, _, over, *_ = _macierz(para[0], para[1], MAX_GOLE)
+    pw, pr, pp, _, over, *_ = _macierz(para[0], para[1], MAX_GOLE + 1)
     w = _wy(*para, 0.0)
     assert w["p1x2"][0] == pytest.approx([pw, pr, pp], abs=2e-4)
     assert w["over25"][0] == pytest.approx(over, abs=2e-4)
 
 
-@pytest.mark.parametrize("para", PARY)
-@pytest.mark.parametrize("rho", [-0.13, -0.05, 0.07])
-def test_tau_zgodne_z_macierza_dixona_colesa(para, rho):
-    """Przy rho != 0 — parytet z `poisson_bayesian.macierz_dixon_coles`."""
+def _macierz_jawna(lg: float, la: float, rho: float) -> np.ndarray:
+    """Jawna macierz MAX_GOLI x MAX_GOLI z korekta tau — wzorzec dla skrotu.
+
+    Ta sama arytmetyka co `poisson_bayesian.macierz_dixon_coles`, ale na
+    MAX_GOLI komorkach. Nie wolam tamtej wprost, bo ona uzywa arange(MAX_GOLE)
+    = 8 komorek, podczas gdy glowna sciezka wola _macierz(..., MAX_GOLE + 1)
+    = 9. Dwie macierze produkcyjne obcinaja W INNYM MIEJSCU — patrz
+    `test_dwie_macierze_produkcyjne_obcinaja_inaczej`.
+    """
+    h = np.arange(MAX_GOLI)
+    from scipy.stats import poisson as _p
+    pg, pa = _p.pmf(h, lg), _p.pmf(h, la)
+    m = np.outer(pg, pa)
+    for (i, j), t in (((0, 0), 1 - lg * la * rho), ((0, 1), 1 + lg * rho),
+                      ((1, 0), 1 + la * rho), ((1, 1), 1 - rho)):
+        m[i, j] *= max(0.0, t)
+    return m / m.sum()
+
+
+def test_dwie_macierze_produkcyjne_obcinaja_inaczej():
+    """Udokumentowany rozjazd w repo, znaleziony 2026-09-05.
+
+    `poisson.predict_match` wola `_macierz(lg, la, MAX_GOLE + 1)` = 9 komorek,
+    a `poisson_bayesian.macierz_dixon_coles` liczy `arange(MAX_GOLE)` = 8.
+    Roznica siega 2.6e-3 w p(1) przy wysokich lambdach — wiecej niz efekty
+    mierzone przez `ksztalt_dc.py`. Ten test nie naprawia rozjazdu, tylko
+    pilnuje, zeby nikt go po cichu nie przeoczyl po raz drugi.
+    """
+    from footstats.config import MAX_GOLE
+    from footstats.core.poisson import _macierz
     from footstats.core.poisson_bayesian import macierz_dixon_coles
 
-    m = macierz_dixon_coles(para[0], para[1], rho)
-    n = m.shape[0]
-    h = np.arange(n)
+    assert MAX_GOLI == MAX_GOLE + 1, "harness ma liczyc tyle komorek co glowna sciezka"
+    assert macierz_dixon_coles(1.5, 1.1, 0.0).shape[0] == MAX_GOLE
+    pw_klas = _macierz(3.0, 2.5, MAX_GOLE + 1)[0]
+    pw_bayes = float(np.tril(macierz_dixon_coles(3.0, 2.5, 0.0), -1).sum())
+    assert abs(pw_klas - pw_bayes) > 1e-3, "rozjazd zniknal — zaktualizuj ten test"
+
+
+@pytest.mark.parametrize("para", PARY)
+@pytest.mark.parametrize("rho", [-0.13, -0.05, 0.07])
+def test_tau_zgodne_z_macierza_jawna(para, rho):
+    """Skrot bez macierzy musi dawac to samo, co macierz zbudowana wprost."""
+    m = _macierz_jawna(para[0], para[1], rho)
+    h = np.arange(m.shape[0])
     oczek_pw = float(np.tril(m, -1).sum())
     oczek_pr = float(np.trace(m))
     oczek_over = float(m[(h[:, None] + h[None, :]) > 2.5].sum())
@@ -61,9 +98,7 @@ def test_tau_zgodne_z_macierza_dixona_colesa(para, rho):
 @pytest.mark.parametrize("wynik", [(0, 0), (1, 0), (0, 1), (1, 1), (2, 1), (3, 3)])
 def test_prawdopodobienstwo_wyniku_zgodne_z_macierza(wynik):
     """`p_wynik` to komorka macierzy — wlacznie z czterema, ktore tau rusza."""
-    from footstats.core.poisson_bayesian import macierz_dixon_coles
-
-    m = macierz_dixon_coles(1.6, 1.2, -0.11)
+    m = _macierz_jawna(1.6, 1.2, -0.11)
     w = _wy(1.6, 1.2, -0.11, wynik[0], wynik[1])
     assert w["p_wynik"][0] == pytest.approx(float(m[wynik]), abs=1e-9)
 
