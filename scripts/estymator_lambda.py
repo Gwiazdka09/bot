@@ -414,13 +414,13 @@ def _sklej(zestawy_lista, meta, klucze) -> dict:
     """Skleja per-ligowe tablice w jedną, dorzucając gole/wynik/ligę/datę."""
     out = {k: [] for k in klucze}
     out.update({"hg": [], "ag": [], "wynik": [], "league": [], "date": []})
-    out.update({k: [] for k in KOL_KURSOW})
+    out.update({k: [] for k in NIESIONE})
     for r, (liga, gl) in zip(zestawy_lista, meta):
         if r is None:
             continue
         for k in klucze:
             out[k].append(r[k])
-        for k in KOL_KURSOW:
+        for k in NIESIONE:
             out[k].append(gl[k].to_numpy(float) if k in gl.columns
                           else np.full(len(gl), np.nan))
         out["hg"].append(gl["hg"].to_numpy(float))
@@ -436,6 +436,11 @@ def _sklej(zestawy_lista, meta, klucze) -> dict:
 # pyta o nie `lambda_kto_lepszy.py` (pomiar C) i bez tego cicho go pomija.
 KOL_KURSOW = ("odds_h_pinn", "odds_d_pinn", "odds_a_pinn",
               "odds_over25_pinn", "odds_under25_pinn")
+
+# `idx` to numer wiersza w RAMCE WEJSCIOWEJ. `_sklej` skleja ligami, wiec
+# kolejnosc wyjscia nie jest globalna kolejnoscia dat — bez tego kotwicy
+# nie da sie zestawic wynikow z czymkolwiek liczonym globalnie.
+NIESIONE = KOL_KURSOW + ("idx",)
 
 KLUCZE = ("atak_dom", "obrona_dom", "atak_wyj", "obrona_wyj",
           "sr_dom", "sr_wyj", "n_gosp", "n_gosc",
