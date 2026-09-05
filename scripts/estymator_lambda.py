@@ -428,7 +428,10 @@ def _sklej(zestawy_lista, meta, klucze) -> dict:
     return {k: np.concatenate(v) for k, v in out.items()}
 
 
-KOL_KURSOW = ("odds_h_pinn", "odds_d_pinn", "odds_a_pinn")
+# 1X2 Pinnacle karmi aneks o mieszance; Over/Under jest niesione OBOK, bo
+# pyta o nie `lambda_kto_lepszy.py` (pomiar C) i bez tego cicho go pomija.
+KOL_KURSOW = ("odds_h_pinn", "odds_d_pinn", "odds_a_pinn",
+              "odds_over25_pinn", "odds_under25_pinn")
 
 KLUCZE = ("atak_dom", "obrona_dom", "atak_wyj", "obrona_wyj",
           "sr_dom", "sr_wyj", "n_gosp", "n_gosc",
