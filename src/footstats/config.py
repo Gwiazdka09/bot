@@ -104,9 +104,20 @@ USE_DIXON_COLES = os.getenv("USE_DIXON_COLES", "1").strip() not in ("0", "false"
 # realnie widac. Waga 0 jest po zmieszaniu z cena NIE DO ODROZNIENIA od 0.13
 # (+0.00000, z=+0.04) — 0.13 zostaje, bo tyle wyszlo z dopasowania na treningu.
 #
-# UWAGA NA PRZYSZLOSC: 0.13 jest dopasowane do ramienia Z BLEDEM. Po naprawie
-# trzech stalych wage trzeba dopasowac OD NOWA — stara wartosc bedzie bez sensu.
-W_BAYESIAN      = float(os.getenv("W_BAYESIAN", "0.13"))  # waga ramienia DC (0=classic, 1=pelny DC)
+# NAPRAWIONE TEGO SAMEGO DNIA (06.09.2026). Piec stalych po zlej stronie boiska
+# w `poisson_bayesian.predict_match_bayesian` zostalo poprawionych; lambda tego
+# ramienia wychodzi teraz 1.4943 / 1.1933, czyli na poziomie ramienia classic.
+# Waga dopasowana OD NOWA na treningu dla NAPRAWIONEGO ramienia: 0.49.
+#
+# Brier 1X2 na holdoucie: zepsute przy 0.13 dawalo 0.61991, naprawione przy
+# 0.49 daje 0.61791 (+0.00200, z=+4.79), 29 lig na 38.
+#
+# UCZCIWIE: po rozcienczeniu cena przy wadze rynku 0.70 zostaje +0.00024
+# (z=+1.65) — PONIZEJ progu rozmiaru 0.0005, ktory sam sobie postawilem
+# w pre-rejestracji 215950690. Naprawa stalych byla bezwarunkowa (blad
+# jednostek), a 0.49 to waga dopasowana do naprawionego ramienia; NIE jest to
+# zmiana, ktora widac na wyjsciu produkcyjnym.
+W_BAYESIAN      = float(os.getenv("W_BAYESIAN", "0.49"))  # waga ramienia DC (0=classic, 1=pelny DC)
 
 # ── P4 (09.08.2026): korekta τ Dixona-Colesa — DOMYSLNIE WYLACZONA ──
 # Ramie nazywane dotad "Dixon-Coles" liczylo `np.outer(pmf_h, pmf_a)`, czyli dwa

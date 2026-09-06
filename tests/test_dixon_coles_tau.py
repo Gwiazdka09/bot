@@ -112,4 +112,9 @@ class TestFlaga:
         bez = pb.predict_match_bayesian("Legia", "Lech", df)
 
         assert bez is not None
-        assert bez["pw"] + bez["pr"] + bez["pa"] == pytest.approx(1.0, abs=1e-6)
+        # Tolerancja 2e-4, nie 1e-6: `predict_match_bayesian` zwraca trzy
+        # liczby ZAOKRAGLONE do 4 miejsc, wiec ich suma moze odbiegac od
+        # jedynki nawet o 1.5e-4. Surowa suma z macierzy jest dokladnie 1.
+        # Prog 1e-6 przechodzil przypadkiem i pekl 06.09.2026 przy zmianie
+        # lambd — nie byla to regresja, tylko inne miejsce zaokraglenia.
+        assert bez["pw"] + bez["pr"] + bez["pa"] == pytest.approx(1.0, abs=2e-4)

@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import poisson
 
-from footstats.config import BONUS_DOMOWY, DC_RHO, MAX_GOLE, USE_DC_TAU
+from footstats.config import DC_RHO, MAX_GOLE, USE_DC_TAU
 
 _log = logging.getLogger(__name__)
 
@@ -127,17 +127,46 @@ def predict_match_bayesian(
     g: str,
     a: str,
     df: pd.DataFrame,
-    home_advantage: float = BONUS_DOMOWY,
+    home_advantage: float = 1.0,
 ) -> Optional[dict]:
     """
     Bayesian Poisson prediction using separate attack/defense ratings.
 
     Model:
-        lambda_home = (home_att / league_home_avg) * (away_def / league_away_avg) * league_home_avg * home_advantage
-                    = home_att_ratio * away_def_ratio * league_home_avg * bonus
-        lambda_away = (away_att / league_away_avg) * (home_def / league_home_avg) * league_away_avg
+        lambda_home = home_att * (away_def / league_home_avg) * home_advantage
+        lambda_away = away_att * (home_def / league_away_avg)
 
     Both attack and defense ratings shrunk toward league prior via Bayesian update.
+
+    NAPRAWIONE 06.09.2026 — PIEC STALYCH BYLO PO ZLEJ STRONIE BOISKA.
+    Do tego dnia funkcja liczyla lambda 2.1585 / 0.9515 przy faktycznych
+    1.5087 / 1.2146 (holdout n=31 628): gospodarz przeszacowany o 43%, gosc
+    zanizony o 22%. Byl to blad JEDNOSTEK, nie wybor modelowy:
+
+      * `away_away["def"]` to gole, ktore gosc TRACI NA WYJEZDZIE — czyli gole
+        GOSPODARZY. Sciagalo sie je do `league_away` i dzielilo przez
+        `league_away`; obie wielkosci musza byc `league_home`;
+      * `home_home["def"]` to gole tracone U SIEBIE — czyli gole GOSCI.
+        Sciagalo sie do `league_home` i dzielilo przez `league_home`; obie
+        musza byc `league_away`;
+      * `BONUS_DOMOWY = 1.15` mnozylo lambda gospodarza, choc `home_att`
+        liczy sie ze sredniej goli GOSPODARZY, ktora atut wlasnego boiska juz
+        zawiera. Atut byl liczony dwa razy. Dokladnie ten sam blad jest opisany
+        i naprawiony w docstringu `form.sily_ligowe`, po drugiej stronie kodu.
+
+    Sprawdzian bez zadnych danych, ktory to lapie: druzyna doskonale
+    przecietna — kazda jej wielkosc rowna swojej sredniej ligowej — musi dostac
+    lambda dokladnie (league_home, league_away), przy KAZDEJ liczbie meczow.
+    Stara wersja dawala tam 1.42x sredniej gospodarza. Pilnuje tego
+    `tests/test_ramie_bayesian_naprawa.py`.
+
+    Po naprawie lambda wychodzi 1.4943 / 1.1933 — na poziomie ramienia classic.
+
+    CZEGO TO NIE NAPRAWIA, a dalej jest zepsute: ta funkcja NIE FILTRUJE LIGI
+    (`_league_averages` liczy srednia z calej przekazanej ramki, a produkcja
+    przekazuje 40 lig naraz), nie ma ZADNEGO okna, i obcina macierz na
+    `MAX_GOLE` komorkach, podczas gdy glowna sciezka wola `MAX_GOLE + 1`.
+    Trzy osobne zmiany projektowe, kazda wymaga wlasnego pomiaru.
     """
     if df.empty or "gole_g" not in df.columns:
         return None
@@ -156,25 +185,27 @@ def predict_match_bayesian(
     if home_home["att"] is None or away_away["att"] is None:
         return None
 
-    # Home team attack (as home)
+    # Home team attack (as home) — gole strzelone u siebie, prior league_home.
     home_att = _bayesian_shrink(home_home["att"], home_home["n"], league_home)
-    # Away team defense (as away) — lower = better defense
-    away_def = _bayesian_shrink(away_away["def"], away_away["n"], league_away)
+    # Away team defense (as away) — gole STRACONE na wyjezdzie, czyli gole
+    # GOSPODARZY. Prior league_home, nie league_away.
+    away_def = _bayesian_shrink(away_away["def"], away_away["n"], league_home)
 
-    # Away team attack (as away)
+    # Away team attack (as away) — gole strzelone na wyjezdzie, prior league_away.
     away_att = _bayesian_shrink(away_away["att"], away_away["n"], league_away)
-    # Home team defense (as home)
+    # Home team defense (as home) — gole STRACONE u siebie, czyli gole GOSCI.
+    # Prior league_away, nie league_home.
     home_def_val = (
-        _bayesian_shrink(home_home["def"], home_home["n"], league_home)
+        _bayesian_shrink(home_home["def"], home_home["n"], league_away)
         if home_home["def"] is not None
-        else league_home
+        else league_away
     )
 
-    # Dixon-Coles style lambdas
-    # lambda_h = (home_att / league_home) * (away_def / league_away) * league_home * home_bonus
-    #           = home_att * (away_def / league_away) * home_bonus
-    lambda_h = max(0.05, home_att * (away_def / league_away) * home_advantage)
-    lambda_a = max(0.05, away_att * (home_def_val / league_home))
+    # Mianowniki musza pasowac do STRONY BOISKA, po ktorej padly gole:
+    # `away_def` liczy gole gospodarzy -> dzielimy przez league_home,
+    # `home_def_val` liczy gole gosci  -> dzielimy przez league_away.
+    lambda_h = max(0.05, home_att * (away_def / league_home) * home_advantage)
+    lambda_a = max(0.05, away_att * (home_def_val / league_away))
 
     # Macierz wynikow. `USE_DC_TAU` wylaczone -> rho=0 -> dokladnie poprzedni
     # iloczyn zewnetrzny, bez zadnej roznicy numerycznej.

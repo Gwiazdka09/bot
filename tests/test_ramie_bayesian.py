@@ -18,6 +18,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from ramie_bayesian import (  # noqa: E402
     MAX_GOLI_BAYES, blenduj, lambdy_bayes, p1x2_bayes, ratingi_bayes, wagi_bayes,
 )
+from ramie_bayesian_naprawa import lambdy_bayes_naprawione  # noqa: E402
+
+# Od 06.09.2026 produkcja liczy lambda WERSJA NAPRAWIONA — parytet celuje w nia.
+# `lambdy_bayes` zostaje jako zapis stanu sprzed naprawy, uzywany przez
+# `ramie_bayesian_naprawa.py` do porownania obu ramion.
+lambdy_prod = lambdy_bayes_naprawione
 
 DRUZYNY = ("Alfa", "Beta", "Gamma", "Delta", "Epsilon", "Zeta")
 
@@ -50,7 +56,7 @@ def test_wagi_trzy_razy_dla_ostatnich_pieciu():
 def test_lambda_zgodna_z_predict_match_bayesian_na_ostatnim_meczu():
     df = _dane()
     r = ratingi_bayes(df)
-    lg, la = lambdy_bayes(r)
+    lg, la = lambdy_prod(r)
     i = len(df) - 1
     oczek = _prod(df.iloc[:i], df.at[i, "home"], df.at[i, "away"])
     assert oczek is not None
@@ -61,7 +67,7 @@ def test_lambda_zgodna_z_predict_match_bayesian_na_ostatnim_meczu():
 def test_lambda_zgodna_na_wielu_meczach():
     """Jeden wiersz moze byc zbiegiem okolicznosci."""
     df = _dane()
-    lg, la = lambdy_bayes(ratingi_bayes(df))
+    lg, la = lambdy_prod(ratingi_bayes(df))
     sprawdzone = 0
     for i in range(40, len(df)):
         oczek = _prod(df.iloc[:i], df.at[i, "home"], df.at[i, "away"])
@@ -75,7 +81,7 @@ def test_lambda_zgodna_na_wielu_meczach():
 
 def test_1x2_zgodne_z_predict_match_bayesian():
     df = _dane()
-    lg, la = lambdy_bayes(ratingi_bayes(df))
+    lg, la = lambdy_prod(ratingi_bayes(df))
     i = len(df) - 1
     oczek = _prod(df.iloc[:i], df.at[i, "home"], df.at[i, "away"])
     p = p1x2_bayes(np.array([lg[i]]), np.array([la[i]]))[0]
@@ -87,11 +93,11 @@ def test_1x2_zgodne_z_predict_match_bayesian():
 def test_ratingi_nie_widza_przyszlosci():
     df = _dane()
     i = 60
-    lg1, la1 = lambdy_bayes(ratingi_bayes(df))
+    lg1, la1 = lambdy_prod(ratingi_bayes(df))
     zepsuty = df.copy()
     zepsuty.loc[i:, "hg"] = 8.0
     zepsuty.loc[i:, "ag"] = 8.0
-    lg2, la2 = lambdy_bayes(ratingi_bayes(zepsuty))
+    lg2, la2 = lambdy_prod(ratingi_bayes(zepsuty))
     assert lg1[i] == pytest.approx(lg2[i])
     assert la1[i] == pytest.approx(la2[i])
 
@@ -99,10 +105,10 @@ def test_ratingi_nie_widza_przyszlosci():
 def test_zmiana_przeszlosci_jednak_rusza():
     df = _dane()
     i = 60
-    lg1, _ = lambdy_bayes(ratingi_bayes(df))
+    lg1, _ = lambdy_prod(ratingi_bayes(df))
     zmieniony = df.copy()
     zmieniony.loc[: i - 1, "hg"] = 6.0
-    lg2, _ = lambdy_bayes(ratingi_bayes(zmieniony))
+    lg2, _ = lambdy_prod(ratingi_bayes(zmieniony))
     assert lg1[i] != pytest.approx(lg2[i])
 
 
@@ -114,12 +120,12 @@ def test_ramie_bayesian_ignoruje_lige():
     """
     df = _dane()
     i = len(df) - 1
-    lg1, _ = lambdy_bayes(ratingi_bayes(df))
+    lg1, _ = lambdy_prod(ratingi_bayes(df))
     inny_swiat = df.copy()
     obce = (inny_swiat["home"] != df.at[i, "home"]) & (inny_swiat["away"] != df.at[i, "home"]) \
         & (inny_swiat["home"] != df.at[i, "away"]) & (inny_swiat["away"] != df.at[i, "away"])
     inny_swiat.loc[obce, "hg"] = 5.0
-    lg2, _ = lambdy_bayes(ratingi_bayes(inny_swiat))
+    lg2, _ = lambdy_prod(ratingi_bayes(inny_swiat))
     assert lg1[i] != pytest.approx(lg2[i]), \
         "lambda pary zalezy od meczow zupelnie obcych druzyn — to jest ta wada"
 
@@ -178,20 +184,24 @@ def test_waga_ramienia_obnizona_swiadomie():
     """
     from footstats.config import W_BAYESIAN
 
-    assert W_BAYESIAN == pytest.approx(0.13)
+    assert W_BAYESIAN == pytest.approx(0.49)
 
 
-def test_lambda_ramienia_jest_zepsuta_i_to_jest_udokumentowane():
-    """Regresja na diagnoze, nie na poprawnosc.
+def test_lambda_ramienia_jest_juz_zdrowa():
+    """Po naprawie pieciu stalych (06.09.2026) lambda ma byc realistyczna.
 
-    Priory sa przypiete do ZLEJ strony boiska (obrona gosca na wyjezdzie to
-    gole gospodarza, wiec prior powinien byc `league_home`), a `BONUS_DOMOWY`
-    doklada atut wlasnego boiska drugi raz. Skutek: lambda gospodarza
-    przeszacowana o ~43%. Gdy ktos to naprawi, ten test ma UPASC — i wtedy
-    trzeba dopasowac W_BAYESIAN od nowa, bo 0.13 jest dopasowane do bledu.
+    Przed naprawa bylo 2.1585 / 0.9515 przy faktycznych 1.5087 / 1.2146 —
+    priory i mianowniki po zlej stronie boiska plus podwojny BONUS_DOMOWY.
     """
-    df = _dane(n=200, ziarno=21)
-    lg, la = lambdy_bayes(ratingi_bayes(df))
-    ogon = slice(100, None)
-    assert lg[ogon].mean() > 1.9, "lambda gospodarza przestala byc zawyzona — patrz docstring"
-    assert la[ogon].mean() < 1.1, "lambda goscia przestala byc zanizona — patrz docstring"
+    df = _dane(n=300, ziarno=21)
+    r = ratingi_bayes(df)
+    lg, la = lambdy_prod(r)
+    ogon = slice(150, None)
+    fakt_g = df["hg"].to_numpy()[ogon].mean()
+    fakt_a = df["ag"].to_numpy()[ogon].mean()
+    assert abs(lg[ogon].mean() - fakt_g) < 0.15, "lambda gospodarza odjezdza"
+    assert abs(la[ogon].mean() - fakt_a) < 0.15, "lambda goscia odjezdza"
+
+    # Kontrola: stara arytmetyka byla wyraznie gorsza na tych samych danych.
+    lg_z, la_z = lambdy_bayes(r)
+    assert abs(lg_z[ogon].mean() - fakt_g) > abs(lg[ogon].mean() - fakt_g)
