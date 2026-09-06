@@ -167,3 +167,31 @@ def test_blend_skrajne_wagi():
     assert blenduj(p_c, p_b, 0.0)[0] == pytest.approx(p_c[0])
     assert blenduj(p_c, p_b, 1.0)[0] == pytest.approx(p_b[0])
     assert blenduj(p_c, p_b, 0.5)[0].sum() == pytest.approx(1.0)
+
+
+def test_waga_ramienia_obnizona_swiadomie():
+    """Wartosc z pomiaru 06.09 — gdyby ktos ja zmienil, ma to zrobic swiadomie.
+
+    0.5 dawalo Brier 1X2 0.63344 na holdoucie, 0.13 daje 0.61991 (+0.01352,
+    z=+19.14, 37 lig na 38). Po zmieszaniu z cena przy wadze rynku 0.70 zysk
+    +0.00134 (z=+5.53) — jedyna zmiana tej serii, ktora realnie widac.
+    """
+    from footstats.config import W_BAYESIAN
+
+    assert W_BAYESIAN == pytest.approx(0.13)
+
+
+def test_lambda_ramienia_jest_zepsuta_i_to_jest_udokumentowane():
+    """Regresja na diagnoze, nie na poprawnosc.
+
+    Priory sa przypiete do ZLEJ strony boiska (obrona gosca na wyjezdzie to
+    gole gospodarza, wiec prior powinien byc `league_home`), a `BONUS_DOMOWY`
+    doklada atut wlasnego boiska drugi raz. Skutek: lambda gospodarza
+    przeszacowana o ~43%. Gdy ktos to naprawi, ten test ma UPASC — i wtedy
+    trzeba dopasowac W_BAYESIAN od nowa, bo 0.13 jest dopasowane do bledu.
+    """
+    df = _dane(n=200, ziarno=21)
+    lg, la = lambdy_bayes(ratingi_bayes(df))
+    ogon = slice(100, None)
+    assert lg[ogon].mean() > 1.9, "lambda gospodarza przestala byc zawyzona — patrz docstring"
+    assert la[ogon].mean() < 1.1, "lambda goscia przestala byc zanizona — patrz docstring"

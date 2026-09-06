@@ -80,7 +80,33 @@ AGENT_KELLY_FRACTION = 4    # bezpieczny fractional Kelly: f*/4 (bardziej konser
 # ── Cel C: Dixon-Coles w produkcji (zwalidowane offline +1.7pp, kalibracja monotoniczna) ──
 # Domyslnie ON — blend graceful (DC None -> classic bez zmian), env toggle bez redeploya.
 USE_DIXON_COLES = os.getenv("USE_DIXON_COLES", "1").strip() not in ("0", "false", "False", "")
-W_BAYESIAN      = float(os.getenv("W_BAYESIAN", "0.5"))   # waga ramienia DC (0=classic, 1=pelny DC)
+
+# WAGA OBNIZONA 0.5 -> 0.13 dnia 06.09.2026 (`scripts/ramie_bayesian.py`,
+# pre-rejestracja 37ea730aa, holdout >=2024, n=31 628). Waga 0.5 byla wpisana
+# z reki i nigdy niedopasowana, a ramie bayesian jest MOCNO zepsute:
+#
+#     lambda ramienia   2.1585 / 0.9515      przy faktycznych 1.5087 / 1.2146
+#
+# Gospodarz przeszacowany o 43%, gosc zanizony o 22%. Przyczyna jest w trzech
+# stalych po zlej stronie boiska w `poisson_bayesian.predict_match_bayesian`:
+# obrona gosca NA WYJEZDZIE to gole gospodarza, wiec jej prior i mianownik
+# powinny byc `league_home`, a sa `league_away` (i symetrycznie dla obrony
+# gospodarza). Do tego `BONUS_DOMOWY` dokłada atut własnego boiska DRUGI raz,
+# bo srednia goli gospodarzy juz go zawiera. Odtworzone na sredniach:
+# kod produkcyjny daje 2.12/0.96, a prior po wlasciwej stronie 1.4883/1.1790.
+#
+# Zmierzone skutki obnizenia wagi (Brier 1X2, holdout):
+#     w=0.00  0.62044     w=0.13  0.61991     w=0.50  0.63344  (bylo)
+#     sparowana 0.5 -> 0.13:  +0.01352  (z=+19.14), 37 lig na 38
+#     po zmieszaniu z cena przy wadze rynku 0.70:  +0.00134  (z=+5.53)
+#
+# To jest ~45x efekt korekty tau z 05.09 i jedyna zmiana w tej serii, ktora
+# realnie widac. Waga 0 jest po zmieszaniu z cena NIE DO ODROZNIENIA od 0.13
+# (+0.00000, z=+0.04) — 0.13 zostaje, bo tyle wyszlo z dopasowania na treningu.
+#
+# UWAGA NA PRZYSZLOSC: 0.13 jest dopasowane do ramienia Z BLEDEM. Po naprawie
+# trzech stalych wage trzeba dopasowac OD NOWA — stara wartosc bedzie bez sensu.
+W_BAYESIAN      = float(os.getenv("W_BAYESIAN", "0.13"))  # waga ramienia DC (0=classic, 1=pelny DC)
 
 # ── P4 (09.08.2026): korekta τ Dixona-Colesa — DOMYSLNIE WYLACZONA ──
 # Ramie nazywane dotad "Dixon-Coles" liczylo `np.outer(pmf_h, pmf_a)`, czyli dwa
