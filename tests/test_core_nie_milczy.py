@@ -123,16 +123,49 @@ def _baza_padnie(monkeypatch):
     monkeypatch.setattr(pdb, "_connect", _wybuch)
 
 
-def test_awaria_bazy_przy_goal_share_mowi_o_skutku_dla_lambdy(caplog, monkeypatch):
+def test_awaria_bazy_przy_goal_share_mowi_o_skutku_dla_lambdy(caplog, monkeypatch, tmp_path):
     """Pusty wynik zeruje `goal_share`, przez co korekta λ za kontuzje przestaje
-    działać — a wygląda to jak drużyna bez zapisanych strzelców."""
+    działać — a wygląda to jak drużyna bez zapisanych strzelców.
+
+    ZAWĘŻONE 07.09.2026. Od kiedy istnieje zrzut `data/player_stats.json`, sama
+    awaria bazy NIE zeruje już goal_share — w kontenerze baza nie istnieje
+    w ogóle i to jest stan normalny. Ostrzeżenie należy się dopiero, gdy padnie
+    RÓWNIEŻ zrzut, bo dopiero wtedy korekta λ faktycznie umiera. Wcześniej ten
+    komunikat leciał 105 razy w jednym przebiegu i był czystym szumem.
+    """
     _baza_padnie(monkeypatch)
+    monkeypatch.setattr(pdb, "SCIEZKA_ZRZUTU", tmp_path / "nie_ma.json")
+    pdb._zrzut_goli.cache_clear()
 
     with caplog.at_level(logging.WARNING):
         assert pdb.team_goal_shares("Arsenal", 2026) == {}
 
     assert "korekta lambda" in caplog.text
     assert "Arsenal" in caplog.text
+    pdb._zrzut_goli.cache_clear()
+
+
+def test_awaria_bazy_ze_zrzutem_NIE_hałasuje(caplog, monkeypatch, tmp_path):
+    """Kontrola do powyższego: gdy zrzut ratuje sytuację, alarmu nie ma.
+
+    Szum niszczy alarmy tak samo skutecznie jak cisza — a to jest ścieżka,
+    którą kontener przechodzi przy KAŻDYM odczycie.
+    """
+    import json
+
+    _baza_padnie(monkeypatch)
+    plik = tmp_path / "player_stats.json"
+    plik.write_text(json.dumps([
+        {"name": "Saka", "team_norm": "arsenal", "season": 2026, "goals": 8}]),
+        encoding="utf-8")
+    monkeypatch.setattr(pdb, "SCIEZKA_ZRZUTU", plik)
+    pdb._zrzut_goli.cache_clear()
+
+    with caplog.at_level(logging.WARNING):
+        assert pdb.team_goal_shares("Arsenal", 2026) == {"Saka": 1.0}
+
+    assert "korekta lambda" not in caplog.text
+    pdb._zrzut_goli.cache_clear()
 
 
 def test_awaria_bazy_przy_skladzie_jest_glosna(caplog, monkeypatch):

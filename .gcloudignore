@@ -38,3 +38,8 @@ scratch/
 node_modules/
 src/footstats/gui/node_modules/
 src/footstats/gui/dist/
+
+# Zrzut goli zawodnikow: jedyne zrodlo goal_share w kontenerze, bo
+# footstats_backtest.db jest wykluczony wyzej. Bez niego kanal team-news
+# jest martwy (patrz Dockerfile.jobs).
+!/data/player_stats.json

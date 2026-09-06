@@ -45,6 +45,11 @@ ENV/
 
 !/data/rag_wzorce_historyczne.json
 
+# Zrzut goli zawodnikow: jedyne zrodlo goal_share w kontenerze, bo
+# footstats_backtest.db jest wykluczony. Bez niego kanal team-news jest
+# martwy — patrz tests/test_player_stats_w_obrazach.py.
+!/data/player_stats.json
+
 # ── Logi i pliki tymczasowe
 logs/
 footstats.log

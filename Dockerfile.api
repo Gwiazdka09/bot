@@ -48,6 +48,11 @@ COPY data/model_calibration.json ./data/model_calibration.json
 # tego samego paliwa co joby.
 COPY data/rag_wzorce_historyczne.json ./data/rag_wzorce_historyczne.json
 
+# Zrzut goli zawodnikow — patrz komentarz w Dockerfile.jobs. `/cron/draft`
+# chodzi na SERWISIE, wiec bez tego pliku ma dokladnie ten sam martwy
+# kanal team-news co joby.
+COPY data/player_stats.json ./data/player_stats.json
+
 # Zaleznosci z LOCKA — uzasadnienie w Dockerfile.jobs. Lock dla samego [api]:
 #   uv pip compile pyproject.toml --extra api \
 #     --python-platform linux --python-version 3.12 -o requirements-api.lock

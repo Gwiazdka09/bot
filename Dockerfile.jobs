@@ -37,6 +37,15 @@ COPY data/model_calibration.json ./data/model_calibration.json
 # więc bez tego pliku `pobierz_rag_wzorce` zwraca pusty string zawsze.
 COPY data/rag_wzorce_historyczne.json ./data/rag_wzorce_historyczne.json
 
+# Zrzut goli zawodnikow (`scripts/eksport_player_stats.py`). Bazy
+# `footstats_backtest.db` w obrazie NIE MA i nie bedzie — jest wykluczona
+# w .dockerignore i .gcloudignore. Bez tego pliku `player_db` dostaje
+# `no such table: player_stats` (105 wpisow na stderr w jednym przebiegu
+# 06.09.2026), goal_share schodzi do zera, `_policz_edge_absencji` wychodzi
+# na `continue` i CALY kanal team-news jest martwy: p_over_abs,
+# edge_absencje i rynek_p_over nie powstaja nigdy.
+COPY data/player_stats.json ./data/player_stats.json
+
 # Zależności: api (sentry/psycopg2) + ai (groq/langfuse) + scraper (playwright/bs4).
 # NIE tylko [api] — daily_agent/evening potrzebują groq (Groq) i bs4 (scraper sędziów).
 # Zaleznosci z LOCKA, nie z zakresow ">=". Bez tego dwa buildy tego samego commita

@@ -1089,6 +1089,20 @@ def main():
         _enrichuj_finalna_faza(wyniki, _klucz_af() or "")
         console.print(f"[cyan]{args.faza.capitalize()}: {len(wyniki)} kandydatów po wzbogaceniu o składy/sędziego[/cyan]")
 
+        # Dziennik kalibracyjny poszedl WYZEJ, przed filtrami — celowo, bo ma
+        # widziec wszystkie oceny modelu, nie te ~5%, ktore przetrwaly filtr
+        # wartosci. Pola team-news powstaja dopiero teraz, wiec bez tego
+        # dopisania zostawaly NULL-em na zawsze: 07.09.2026 produkcja miala
+        # 1078 wierszy w `model_log` i ZERO z niepustym `p_over_abs`, mimo
+        # dzialajacej flagi i dzialajacego zrodla.
+        try:
+            from footstats.core.kalibracja_log import uzupelnij_team_news
+            n_tn = uzupelnij_team_news(wyniki)
+            if n_tn:
+                console.print(f"[dim]Dziennik kalibracyjny: team-news dla {n_tn} ocen[/dim]")
+        except (ImportError, OSError, RuntimeError) as e:
+            log.warning("Dziennik kalibracyjny: team-news pominiete: %s", e)
+
         # 11.5: Korekta BTTS/Over2.5 per sędzia (po enrichmencie)
         try:
             from footstats.scrapers.referee_db import referee_prob_adjustment

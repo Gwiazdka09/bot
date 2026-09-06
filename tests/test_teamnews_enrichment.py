@@ -124,16 +124,35 @@ def test_zerowe_pokrycie_to_ALARM_a_nie_cisza(monkeypatch, caplog, kandydat):
     assert "0/1" in caplog.text
 
 
-def test_puste_zrodlo_nie_alarmuje_drugi_raz(monkeypatch, caplog, kandydat):
-    """Gdy zrodlo zwrocilo [], powod zglosil juz adapter na ERROR. Drugi alarm
-    tutaj bylby duplikatem — a szum zabija alarmy tak samo jak cisza."""
+def test_puste_zrodlo_alarmuje_ze_skutkiem(monkeypatch, caplog, kandydat):
+    """ODWROCONE 07.09.2026 — poprzednia wersja opierala sie na nieprawdzie.
+
+    Test nazywal sie `..._nie_alarmuje_drugi_raz` i tlumaczyl cisze tym, ze
+    „powod zglosil juz adapter na ERROR". Adapter krzyczy jednak WYLACZNIE gdy
+    padnie zapytanie o liste dnia. Gdy lista przyjdzie poprawnie i po prostu
+    ZERO meczow pasuje do naszych kandydatow, `fetch_dla` loguje to na DEBUG —
+    czyli na produkcji nie zostaje zaden slad, a `_wzbogac_team_news` konczy sie
+    cicho i przebieg raportuje sukces.
+
+    Zmierzone: job `footstats-final` z 06.09 przeszedl cala faze final i w 258
+    liniach stdout nie ma ANI JEDNEJ wzmianki o team-news. Kanal byl martwy od
+    wlaczenia flagi 05.09 i nie bylo jak tego zobaczyc — `model_log` mial
+    1078 wierszy i zero z jakimkolwiek polem team-news.
+
+    Przy twardej awarii adaptera powstana teraz dwie linie, i to jest w porzadku:
+    adapter mowi CO padlo, ta linia mowi ILE nas to kosztowalo. To nie duplikat,
+    tylko przyczyna i skutek.
+    """
     monkeypatch.setenv(dp.FLAGA_TEAM_NEWS, "1")
     monkeypatch.setattr(dp, "_pobierz_team_news", lambda data, pary: [])
 
     with caplog.at_level(logging.WARNING):
         dp._wzbogac_team_news([kandydat])
 
-    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+    ostrzezenia = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert ostrzezenia, "smierc calego kanalu nie moze byc widoczna tylko na DEBUG"
+    assert "team-news" in caplog.text
+    assert "1" in caplog.text, "komunikat ma podac, ilu kandydatow zostalo bez danych"
 
 
 def test_brak_kandydatow_nie_wola_zrodla(monkeypatch):

@@ -214,12 +214,79 @@ def zapisz_partie(kandydaci: list[dict], zrodlo: str = "final") -> int:
     zapisane = 0
     for k in kandydaci:
         try:
-            if zapisz_ocene(k, zrodlo) is not None:
+            wiersz = zapisz_ocene(k, zrodlo)
+            if wiersz is not None:
+                # Znacznik do drugiej fazy (`uzupelnij_team_news`). Bez niego nie
+                # da sie potem trafic w ten sam wiersz, a dopasowywanie po
+                # nazwach byloby trzecim mechanizmem dopasowania w tym repo.
+                k["_model_log_id"] = wiersz
                 zapisane += 1
         except _AWARIE_ZAPISU as e:
             # Jeden zepsuty kandydat nie moze zablokowac zapisu pozostalych.
             log.warning("kalibracja_log: pomijam kandydata (%s): %s", k.get("gospodarz"), e)
     return zapisane
+
+
+# Pola liczone przez `daily_phases._policz_edge_absencji`, czyli PO tym, jak
+# `zapisz_partie` zdazyl juz wstawic wiersz. Patrz `uzupelnij_team_news`.
+_POLA_TEAM_NEWS = (
+    "p_over_abs", "edge_absencje", "rynek_p_over",
+    "absencje_udzial_home", "absencje_udzial_away",
+    "absencje_pewne_home", "absencje_pewne_away",
+)
+
+
+def _pola_team_news(kandydat: dict) -> dict:
+    """Te z pol team-news, ktore kandydat REALNIE ma.
+
+    Brak klucza to nie to samo co wartosc zero: zero znaczy „policzone i wyszlo
+    zero", brak znaczy „nie liczylismy". Zlanie ich zatrulo by kazda pozniejsza
+    analize, wiec do UPDATE-u ida wylacznie klucze obecne w slowniku.
+    """
+    return {p: kandydat[p] for p in _POLA_TEAM_NEWS if p in kandydat}
+
+
+def uzupelnij_team_news(kandydaci: list[dict]) -> int:
+    """Dopisuje do `model_log` pola policzone PO wstawieniu wiersza.
+
+    DLACZEGO OSOBNA FAZA. `daily_agent.main()` zapisuje dziennik zanim odsieje
+    kandydatow filtrami, bo `model_log` ma widziec WSZYSTKIE oceny modelu, nie
+    te ~5%, ktore przetrwaja filtr wartosci. Team news liczy sie dopiero po tych
+    filtrach, w `_enrichuj_finalna_faza`. Skutek zmierzony 07.09.2026 na
+    produkcji: 1078 wierszy w `model_log` i ZERO z niepustym `p_over_abs`,
+    mimo ze flaga `FOOTSTATS_TEAM_NEWS=1` chodzila od 05.09, a FotMob oddawal
+    dane. Kolumny byly w INSERT-cie od 04.09 i nadal nie mialy szans.
+
+    Przeniesienie INSERT-a za wzbogacenie kosztowaloby 80% dziennika, wiec
+    zostaje UPDATE po id zapisanym w `zapisz_partie`.
+
+    Zwraca liczbe zaktualizowanych wierszy. Jak caly dziennik — awaria jest
+    logowana i polykana, bo to obserwacja, nie warunek dzialania.
+    """
+    doi = [(k["_model_log_id"], _pola_team_news(k)) for k in kandydaci
+           if k.get("_model_log_id") is not None and _pola_team_news(k)]
+    if not doi:
+        return 0
+
+    zmienione = 0
+    try:
+        with _connect() as conn:
+            for wiersz_id, pola in doi:
+                przypisania = ", ".join(f"{p} = ?" for p in pola)
+                try:
+                    conn.execute(
+                        f"UPDATE model_log SET {przypisania} WHERE id = ?",  # nosec B608
+                        (*pola.values(), wiersz_id),
+                    )
+                    zmienione += 1
+                except _AWARIE_ZAPISU as e:
+                    log.warning("kalibracja_log: team-news dla wiersza %s pominiete: %s",
+                                wiersz_id, e)
+            conn.commit()
+    except _AWARIE_BAZY as e:
+        log.warning("kalibracja_log: uzupelnienie team-news nieudane: %s", e)
+        return 0
+    return zmienione
 
 
 def pobierz_nierozliczone(dni_wstecz: int = 14) -> list[dict]:

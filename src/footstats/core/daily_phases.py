@@ -801,17 +801,6 @@ def _policz_edge_absencji(kandydaci: list) -> None:
         if brak_h or brak_a:
             k["absencje_bez_udzialu"] = len(brak_h) + len(brak_a)
 
-        if not ud_h and not ud_a:
-            # Wiemy, kto nie zagra, ale nie wiemy, ile znaczy. Zgadywanie kary
-            # byłoby gorsze niż jej brak.
-            continue
-
-        lh, la = k.get("lambda_h"), k.get("lambda_a")
-        if not lh or not la:
-            lh, la = estimate_lambdas_from_probs(
-                (k.get("pw") or 0) / 100.0, (k.get("pp") or 0) / 100.0,
-                (k.get("o25") or 0) / 100.0)
-
         # Jawny `market_p_over` wygrywa — kursy są uzupełnieniem, nie nadpisaniem.
         rynek = k.get("market_p_over")
         if rynek is None:
@@ -820,7 +809,24 @@ def _policz_edge_absencji(kandydaci: list) -> None:
         # roznica, wiec po zaokragleniach nie odtworzy sie z niej skladnika —
         # a bez ceny, wobec ktorej liczylismy przewage, nie da sie pozniej
         # orzec, kto mial racje. To jest cala wartosc tego wpisu.
+        #
+        # ZAPIS IDZIE PRZED bramka na udzialy (07.09.2026). Cena nie zalezy od
+        # tego, czy znamy udzial nieobecnych w golach — zalezy od kursow, ktore
+        # juz trzymamy w reku. Do 07.09 stala pod `continue` nizej i przez to
+        # nie zapisala sie ANI RAZU: w kontenerze `player_db` jest puste zawsze
+        # (`no such table: player_stats`), wiec kazdy kandydat wychodzil bramka.
         k["rynek_p_over"] = rynek
+
+        if not ud_h and not ud_a:
+            # Wiemy, kto nie zagra, ale nie wiemy, ile znaczy. Zgadywanie kary
+            # byłoby gorsze niż jej brak — ale cena wyzej zostaje zapisana.
+            continue
+
+        lh, la = k.get("lambda_h"), k.get("lambda_a")
+        if not lh or not la:
+            lh, la = estimate_lambdas_from_probs(
+                (k.get("pw") or 0) / 100.0, (k.get("pp") or 0) / 100.0,
+                (k.get("o25") or 0) / 100.0)
         wynik = over_edge_from_absences(lh, la, ud_h, ud_a, rynek)
         k["lambda_h_abs"] = wynik["lh"]
         k["lambda_a_abs"] = wynik["la"]
@@ -861,9 +867,15 @@ def _wzbogac_team_news(kandydaci: list) -> None:
     pary = [(k.get("gospodarz") or "", k.get("goscie") or "") for k in kandydaci]
     dane = _pobierz_team_news(_date.today().isoformat(), pary)
     if not dane:
-        # Powód zgłosił już adapter, na ERROR. Drugi alarm byłby duplikatem,
-        # a szum zabija alarmy tak samo skutecznie jak cisza.
-        log.debug("team-news: zrodlo oddalo pusta liste")
+        # PODNIESIONE Z DEBUG NA WARNING 07.09.2026. Poprzedni komentarz mówił
+        # „powód zgłosił już adapter, na ERROR" — ale adapter krzyczy WYŁĄCZNIE
+        # gdy padnie zapytanie o listę dnia. Gdy lista przyjdzie poprawnie i po
+        # prostu zero meczów pasuje do naszych kandydatów, jedynym śladem był
+        # `log.debug` w `fotmob.fetch_dla`, czyli na produkcji ślad żaden.
+        # Zmierzone: przebieg `footstats-final` z 06.09 nie zostawił w 258
+        # liniach stdout ANI JEDNEJ wzmianki o team-news, a kanał był martwy.
+        log.warning("team-news: zrodlo oddalo pusta liste — %d kandydatow bez "
+                    "skladow, absencji i sedziego w tym przebiegu", len(kandydaci))
         return
 
     idx = {(normalize_team_name(t.home), normalize_team_name(t.away)): t

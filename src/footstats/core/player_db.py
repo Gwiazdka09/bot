@@ -10,6 +10,8 @@ Zero prod Neon — świadomie lokalny SQLite (reference/cache), testowalny na tm
 """
 from __future__ import annotations
 
+import functools
+import json
 import logging
 import re
 import sqlite3
@@ -20,6 +22,62 @@ from footstats.config import DB_PATH
 
 log = logging.getLogger(__name__)
 from footstats.utils.normalize import normalize_team_name
+
+# Zamrozony zrzut goli, shipowany W OBRAZIE jak `team_mappings.json`.
+#
+# DLACZEGO ISTNIEJE: `data/footstats_backtest.db` jest wykluczony i z
+# `.dockerignore`, i z `.gcloudignore`, wiec w kontenerze jobow tej bazy NIE MA.
+# sqlite3 tworzy wtedy pusty plik, a pierwszy odczyt konczy sie `no such table:
+# player_stats`. Zmierzone na produkcji 07.09.2026: 105 takich wpisow na stderr
+# w jednym przebiegu. Skutek siegal dalej niz sama korekta lambda za kontuzje —
+# `daily_phases._policz_edge_absencji` wychodzil wtedy na `continue`, wiec
+# `p_over_abs`, `edge_absencje` i `rynek_p_over` nie powstawaly NIGDY i caly
+# kanal team-news byl martwy.
+#
+# Zrzut jest TYLKO DO ODCZYTU i swiadomie zamrozony: joby do bazy pisza, ale
+# zapis w kontenerze i tak przepada, wiec wrzucenie calej bazy zamaskowaloby te
+# ulotnosc zamiast ja pokazac. Odswiezanie: `scripts/eksport_player_stats.py`.
+SCIEZKA_ZRZUTU = Path(DB_PATH).parent / "player_stats.json"
+
+
+@functools.lru_cache(maxsize=1)
+def _zrzut_goli() -> dict:
+    """`{(team_norm, sezon): {gracz: gole}}` ze zrzutu. Pusty gdy brak pliku.
+
+    Wczytywane raz na proces — plik ma ~200 KB, ale `team_goal_shares` wola sie
+    po kilkadziesiat razy na przebieg (kazda druzyna razy `lookback` sezonow).
+    """
+    try:
+        dane = json.loads(SCIEZKA_ZRZUTU.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        # Brak pliku to stan mozliwy (dev bez eksportu) — debug. Plik, ktory JEST,
+        # ale sie nie parsuje, to zepsuty artefakt w obrazie i musi krzyczec.
+        poziom = log.debug if isinstance(e, FileNotFoundError) else log.warning
+        poziom("player_db: zrzut %s nie do odczytania (%s: %s)",
+               SCIEZKA_ZRZUTU, type(e).__name__, e)
+        return {}
+
+    tabela: dict = {}
+    odrzucone = 0
+    for w in dane:
+        try:
+            klucz = (str(w["team_norm"]), int(w["season"]))
+            gole = int(w["goals"] or 0)
+        except (KeyError, TypeError, ValueError) as e:
+            # Zbiorczo, nie per wiersz: przy zepsutym eksporcie byloby to tysiace
+            # linii, a szum niszczy alarmy tak samo skutecznie jak cisza.
+            odrzucone += 1
+            if odrzucone == 1:
+                log.debug("player_db: wiersz zrzutu odrzucony (%s: %s)",
+                          type(e).__name__, e)
+            continue
+        if gole > 0:
+            tabela.setdefault(klucz, {})[str(w["name"])] = gole
+    if odrzucone:
+        log.warning("player_db: zrzut ma %d wierszy nie do odczytania z %d —"
+                    " przelicz go `scripts/eksport_player_stats.py`",
+                    odrzucone, len(dane))
+    return tabela
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS player_stats (
@@ -177,19 +235,31 @@ def team_goal_shares(
                 "SELECT name, goals FROM player_stats WHERE team_norm = ? AND season = ?",
                 (tn, int(season)),
             ).fetchall()
+        gole = {r["name"]: int(r["goals"] or 0) for r in rows if r["goals"]}
     except sqlite3.Error as e:
-        # `{}` znaczy tu "druzyna nie ma zapisanych golkerow", czyli stan
-        # NORMALNY dla nieznanej druzyny. Awaria bazy (brak tabeli, blokada,
-        # uszkodzony plik) wygladala identycznie — i cicho zerowala goal_share,
-        # przez co korekta lambda za kontuzje przestawala dzialac.
-        log.warning("player_db: nie moge odczytac goli %s/%s (%s: %s) —"
-                    " goal_share = 0, korekta lambda za kontuzje NIE zadziala",
-                    team, season, type(e).__name__, e)
+        # Zrzut wchodzi WYLACZNIE gdy baza padla — nie gdy po prostu nie zna
+        # druzyny. Inaczej zdrowa, ale swiezo zalozona baza po cichu dostawalaby
+        # zamrozone liczby ze zrzutu i nikt by nie zauwazyl, ze jest pusta.
+        gole = dict(_zrzut_goli().get((tn, int(season)), {}))
+        if not gole:
+            # Baza padla I zrzutu nie ma — dopiero TERAZ korekta lambda za
+            # kontuzje naprawde przestaje dzialac, i dopiero teraz jest o czym
+            # krzyczec. Do 07.09.2026 to ostrzezenie leciało przy KAZDYM
+            # odczycie w kontenerze: 105 razy w jednym przebiegu, czyli szum,
+            # ktory zabija alarmy tak samo skutecznie jak cisza.
+            log.warning("player_db: nie moge odczytac goli %s/%s (%s: %s)"
+                        " i nie ma zrzutu — goal_share = 0, korekta lambda za"
+                        " kontuzje NIE zadziala", team, season, type(e).__name__, e)
+            return {}
+        log.debug("player_db: baza niedostepna dla %s/%s (%s) — uzywam zrzutu",
+                  team, season, type(e).__name__)
+
+    if not gole:
         return {}
-    total = sum(int(r["goals"] or 0) for r in rows)
+    total = sum(gole.values())
     if total <= 0:
         return {}
-    return {r["name"]: int(r["goals"] or 0) / total for r in rows if r["goals"]}
+    return {n: g / total for n, g in gole.items()}
 
 
 def get_team_players(
