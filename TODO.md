@@ -165,6 +165,33 @@ formalne i niezawodność.
 
 Pilnuje tego `tests/test_strony_prawne.py` (20 testów) — sprawdza stan, nie brzmienie.
 
+## 🔴 DO SPRAWDZENIA PO NAJBLIŻSZYM PRZEBIEGU (07.09.2026)
+
+Kanał team-news był martwy na **trzech poziomach naraz** — naprawione w `01ae305f7`,
+szczegóły w `docs/pomiary/team_news_martwy_kanal_2026-09-07.md`. Po pierwszym
+`footstats-final` po deployu:
+
+```sql
+SELECT COUNT(*) FROM model_log WHERE absencje_pewne_home IS NOT NULL;  -- > 0
+SELECT COUNT(*) FROM model_log WHERE rynek_p_over IS NOT NULL;         -- > 0
+SELECT COUNT(*) FROM model_log WHERE p_over_abs IS NOT NULL;           -- > 0
+```
+
+Trzecia liczba jest testem tego, czy `data/player_stats.json` dojechał do obrazu:
+jeśli zostanie zerem przy dwóch pierwszych niezerowych — zrzut nie doszedł.
+
+- [ ] **Zostało nienaprawione:** `_wzbogac_team_news` pobiera listę FotMoba tylko
+  na DZIŚ (`_date.today()`), a kandydaci są z okna 72h. Przy 74% meczów granych
+  tego samego dnia to nie jest główna strata, ale ~1/4 kandydatów jest poza
+  zasięgiem. Osobna zmiana, osobny pomiar.
+- [ ] **Odświeżanie zrzutu:** `scripts/eksport_player_stats.py` przed budową obrazu,
+  kiedy `player_stats` było niedawno aktualizowane. Zrzut się starzeje —
+  `team_goal_shares_recent` sięga tylko `lookback` sezonów wstecz.
+- [ ] `scripts/sklady_pomiar.py` odmawia analizy poniżej 500 rozliczonych wierszy.
+  Przy ~30 kandydatach dziennie to około dwóch miesięcy zbierania.
+
+---
+
 ### Faza 2 — niezawodność (zanim wejdą ludzie)
 - **J1** — 271 z 546 `except` milczy. **Zakres na teraz, nie wszystkie 271:** strażnik z baselinem
   (żeby nie przybywało nowych) + naprawa ścieżek, które widzi użytkownik i którymi jedzie potok.
@@ -172,6 +199,11 @@ Pilnuje tego `tests/test_strony_prawne.py` (20 testów) — sprawdza stan, nie b
   (kupony stały 8 dni przy `exit=0`, próg selekcji nigdy nie działał, football-data nigdy nie
   odpowiadało, CI świeciło czerwono aż przestało znaczyć, alarm miał wyć codziennie).
   Przy jednym użytkowniku to koszt czasu. Przy stu — ktoś inny patrzy na pustą stronę.
+  - **07.09: strażnik z baselinem już istnieje** (`test_ciche_except_audit.py`, 255/555).
+    Domknięte dwie ścieżki potoku: `_wzbogac_team_news` przy pustym źródle logowało
+    DEBUG (przebieg 06.09 zostawił 258 linii stdout i zero wzmianek o team-news) → WARNING;
+    `player_db` odwrotnie — ostrzegało 105×/przebieg dla stanu stałego → zawężone do
+    momentu, w którym korekta λ faktycznie umiera. Szum niszczy alarmy tak samo jak cisza.
 
 ### Faza 3 — dopiero po tym publikacja
 - Wypuszczenie, obserwacja: czy ktokolwiek wraca.
